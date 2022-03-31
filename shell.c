@@ -16,10 +16,12 @@ void prompt() {
 	printf(">> ");
 }
 
-void read_command(char* buf, char** args) {
+void readline(char* buf) {
 	fgets(buf, MAX_LINE, stdin);
 	buf[strcspn(buf, "\r\n")] = 0;
+}
 
+void parse_command(char* buf, char** args) {
 	char* token = strtok(buf, " ");
 	int i = 0;
 
@@ -65,14 +67,16 @@ int main() {
 
 		prompt();
 
-		read_command(buf, args);
+		readline(buf);
+
+		parse_command(buf, args);
 		
 		if (is_exit_command(buf)) {
 			printf("Exiting the console.\n");
 			break;
 		}
 
-		execute_command(buf, args);
+		execute_command(args[0], args);
 	}
 
 	return 0;
