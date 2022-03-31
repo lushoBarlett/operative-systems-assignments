@@ -9,6 +9,9 @@
 #define MAX_ARGS 10
 #define MAX_COMMANDS 10
 
+#define IN 0
+#define OUT 1
+
 typedef struct Command {
 	char* args[MAX_ARGS];
 } Command;
@@ -61,7 +64,40 @@ bool is_parent_process(pid_t process_id) {
 	return process_id > 0;
 }
 
-void execute_command(Command* command) {
+bool is_child_process(pid_t process_id) {
+	return process_id == 0;
+}
+
+void pipe_command_chain(Command* command, int input_fd, int current, int amount) {
+
+	if (current == amount - 1) {
+		pid_t process_id = fork();
+
+		if (fork_failed(process_id)) {
+			printf("Shell error.\n");
+			return;
+		}
+
+		if (is_child_process(process_id)) {
+			dup2(input_fd, IN);
+
+			execvp(command->args[0], command->args);
+			printf("Error executing the command.\n");
+			exit(0);
+		}
+
+		if (input_fd != IN)
+			close(input_fd);
+
+		return;
+	}
+
+	int pipefd[2];
+	
+	// TODO: handle pipe errors better
+	if (pipe(pipefd))
+		exit(-1);
+
 	pid_t process_id = fork();
 
 	if (fork_failed(process_id)) {
@@ -69,14 +105,22 @@ void execute_command(Command* command) {
 		return;
 	}
 
-	if (is_parent_process(process_id)) {
-		wait(NULL);
-		return;
+	if (is_child_process(process_id)) {
+		dup2(input_fd, IN);
+		dup2(pipefd[OUT], OUT);
+		close(pipefd[IN]);
+
+		execvp(command->args[0], command->args);
+		printf("Error executing the command.\n");
+		exit(0);
 	}
 
-	execv(command->args[0], command->args);
-	printf("Error executing the command.\n");
-	exit(0);
+	if (input_fd != IN)
+		close(input_fd);
+
+	close(pipefd[OUT]);
+
+	pipe_command_chain(command + 1, pipefd[IN], current + 1, amount);
 }
 
 int main() {
@@ -96,7 +140,10 @@ int main() {
 			break;
 		}
 
-		execute_command(&commands[0]);
+		pipe_command_chain(commands, IN, 0, command_amount);
+
+		for (int i = 0; i < command_amount; i++)
+			wait(NULL);
 	}
 
 	return 0;
