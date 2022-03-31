@@ -8,8 +8,12 @@
 #define MAX_LINE 100
 #define MAX_ARGS 10
 
-bool is_exit_command(const char* buf) {
-	return strcmp(buf, "exit") == 0;
+typedef struct Command {
+	char* args[MAX_ARGS];
+} Command;
+
+bool is_exit_command(Command* command) {
+	return strcmp(command->args[0], "exit") == 0;
 }
 
 void prompt() {
@@ -21,16 +25,16 @@ void readline(char* buf) {
 	buf[strcspn(buf, "\r\n")] = 0;
 }
 
-void parse_command(char* buf, char** args) {
+void parse_command(char* buf, Command* command) {
 	char* token = strtok(buf, " ");
 	int i = 0;
 
 	while(token != NULL) {
-		args[i++] = token;
+		command->args[i++] = token;
 		token = strtok(NULL, " ");
 	}
 
-	args[i] = NULL;
+	command->args[i] = NULL;
 }
 
 bool fork_failed(pid_t process_id) {
@@ -41,7 +45,7 @@ bool is_parent_process(pid_t process_id) {
 	return process_id > 0;
 }
 
-void execute_command(const char* buf, char * const* args) {
+void execute_command(Command* command) {
 	pid_t process_id = fork();
 
 	if (fork_failed(process_id)) {
@@ -54,7 +58,7 @@ void execute_command(const char* buf, char * const* args) {
 		return;
 	}
 
-	execv(buf, args);
+	execv(command->args[0], command->args);
 	printf("Error executing the command.\n");
 	exit(0);
 }
@@ -63,20 +67,20 @@ int main() {
 
 	while(1) {
 		char buf[MAX_LINE];
-		char* args[MAX_ARGS];
+		Command command;
 
 		prompt();
 
 		readline(buf);
 
-		parse_command(buf, args);
+		parse_command(buf, &command);
 		
-		if (is_exit_command(buf)) {
+		if (is_exit_command(&command)) {
 			printf("Exiting the console.\n");
 			break;
 		}
 
-		execute_command(args[0], args);
+		execute_command(&command);
 	}
 
 	return 0;
