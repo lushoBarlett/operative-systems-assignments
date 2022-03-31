@@ -5,8 +5,9 @@
 #include <sys/wait.h>
 #include <stdbool.h>
 
-#define MAX_LINE 100
+#define MAX_LINE 1000
 #define MAX_ARGS 10
+#define MAX_COMMANDS 10
 
 typedef struct Command {
 	char* args[MAX_ARGS];
@@ -26,15 +27,30 @@ void readline(char* buf) {
 }
 
 void parse_command(char* buf, Command* command) {
-	char* token = strtok(buf, " ");
+	char* argument_string = strtok(buf, " ");
 	int i = 0;
 
-	while(token != NULL) {
-		command->args[i++] = token;
-		token = strtok(NULL, " ");
+	while (argument_string) {
+		command->args[i++] = argument_string;
+		argument_string = strtok(NULL, " ");
 	}
 
 	command->args[i] = NULL;
+}
+
+int parse_commands(char* buf, Command* commands) {
+	char* command_strings[MAX_COMMANDS];
+
+	int i = 0;
+
+	command_strings[i] = strtok(buf, "|");
+
+	while (command_strings[++i] = strtok(NULL, "|"));
+
+	for (int j = 0; j < i; j++)
+		parse_command(command_strings[j], &commands[j]);
+
+	return i;
 }
 
 bool fork_failed(pid_t process_id) {
@@ -67,20 +83,20 @@ int main() {
 
 	while(1) {
 		char buf[MAX_LINE];
-		Command command;
+		Command commands[MAX_COMMANDS];
 
 		prompt();
 
 		readline(buf);
 
-		parse_command(buf, &command);
-		
-		if (is_exit_command(&command)) {
+		int command_amount = parse_commands(buf, commands);
+
+		if (is_exit_command(&commands[0])) {
 			printf("Exiting the console.\n");
 			break;
 		}
 
-		execute_command(&command);
+		execute_command(&commands[0]);
 	}
 
 	return 0;
