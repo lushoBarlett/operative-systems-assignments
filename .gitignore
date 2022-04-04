@@ -1,2 +1,5 @@
 shell
+smokers
+philosophers_semaphores
+philosophers_leftist
 *.swp
