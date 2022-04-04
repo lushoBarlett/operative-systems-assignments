@@ -34,41 +34,51 @@ void fumar(int fumador) {
 
 void *fumador1(void *arg) {
     for (;;) {
-        sem_wait(&tabaco);
-        if (sem_trywait(&papel) == 0) {
-            fumar(1);
-            sem_post(&otra_vez);
-        } else {
-            sem_post(&tabaco);
-        }
+	int sem_value_1, sem_value_2;
+
+        sem_getvalue(&tabaco, &sem_value_1);
+        sem_getvalue(&papel, &sem_value_2);
+
+	if (sem_value_1 && sem_value_2) {
+		sem_wait(&tabaco);
+		sem_wait(&papel);
+		fumar(1);
+		sem_post(&otra_vez);
+	}
     }
 }
 
-
 void *fumador2(void *arg) {
     for (;;) {
-        sem_wait(&fosforos);
-        if (sem_trywait(&tabaco) == 0) {
-            fumar(2);
-            sem_post(&otra_vez);
-        } else {
-            sem_post(&fosforos);
-        }
+	int sem_value_1, sem_value_2;
+
+        sem_getvalue(&fosforos, &sem_value_1);
+        sem_getvalue(&tabaco, &sem_value_2);
+
+	if (sem_value_1 && sem_value_2) {
+		sem_wait(&fosforos);
+		sem_wait(&tabaco);
+		fumar(2);
+		sem_post(&otra_vez);
+	}
     }
 }
 
 void *fumador3(void *arg) {
     for (;;) {
-        sem_wait(&papel);
-        if (sem_trywait(&fosforos) == 0) {
-            fumar(3);
-            sem_post(&otra_vez);
-        } else {
-            sem_post(&papel);
-        }
+	int sem_value_1, sem_value_2;
+
+        sem_getvalue(&papel, &sem_value_1);
+        sem_getvalue(&fosforos, &sem_value_2);
+
+	if (sem_value_1 && sem_value_2) {
+		sem_wait(&papel);
+		sem_wait(&fosforos);
+		fumar(3);
+		sem_post(&otra_vez);
+	}
     }
 }
-
 
 int main() {
     pthread_t s1, s2, s3;

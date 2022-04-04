@@ -1,5 +1,5 @@
 shell
-smokers
+smokers_same_agent
 philosophers_semaphores
 philosophers_leftist
 *.swp

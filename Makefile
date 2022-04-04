@@ -1,11 +1,11 @@
 .PHONY: all
-all: shell smokers philosophers_semaphores philosophers_leftist
+all: shell smokers_same_agent philosophers_semaphores philosophers_leftist
 
 shell: shell.c
 	gcc shell.c -o shell -pthread
 
-smokers: smokers.c
-	gcc smokers.c -o smokers -pthread
+smokers_same_agent: smokers_same_agent.c
+	gcc smokers_same_agent.c -o smokers_same_agent -pthread
 
 philosophers_semaphores: philosophers_semaphores.c
 	gcc philosophers_semaphores.c -o philosophers_semaphores -pthread
