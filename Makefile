@@ -1,5 +1,5 @@
 .PHONY: all
-all: shell smokers_same_agent philosophers_semaphores philosophers_leftist io
+all: shell smokers_same_agent philosophers_semaphores philosophers_leftist io server
 
 shell: shell.c
 	gcc shell.c -o shell -pthread
@@ -15,3 +15,6 @@ philosophers_leftist: philosophers_leftist.c
 
 io: io.c
 	gcc io.c -pthread -o io
+
+server: server.c
+	gcc server.c -pthread -o server
