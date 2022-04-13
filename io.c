@@ -37,9 +37,7 @@ int main() {
 		char *filename;
 		int fd_newfile;
 
-		prompt();
-
-		readline(buf);
+		prompt(buf);
 
 		int without_file = parse_line(buf, &command, &filename);
 

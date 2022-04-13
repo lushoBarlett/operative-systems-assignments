@@ -78,9 +78,7 @@ int main() {
 		char buf[MAX_LINE];
 		Command commands[MAX_COMMANDS];
 
-		prompt();
-
-		readline(buf);
+		prompt(buf);
 
 		int command_amount = parse_commands(buf, commands);
 

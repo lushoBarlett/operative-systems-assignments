@@ -14,11 +14,8 @@ bool is_exit_command(Command* command) {
 	return strcmp(command->args[0], "exit") == 0;
 }
 
-void prompt() {
+void prompt(char* buf) {
 	printf(">> ");
-}
-
-void readline(char* buf) {
 	fgets(buf, MAX_LINE, stdin);
 	buf[strcspn(buf, "\r\n")] = 0;
 }
