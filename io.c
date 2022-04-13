@@ -56,7 +56,7 @@ int main() {
 		if (is_child_process(process_id)) {
 			if (!without_file) {
 				fd_newfile = open_file(filename);
-				dup2(fd_newfile, OUT);
+				set_stdout(fd_newfile);
 			}
 			
 			execute_command(&command);

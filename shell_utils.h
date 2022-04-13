@@ -6,6 +6,14 @@
 #define IN 0
 #define OUT 1
 
+void set_stdin(int fd) {
+	dup2(fd, IN);
+}
+
+void set_stdout(int fd) {
+	dup2(fd, OUT);
+}
+
 typedef struct Command {
 	char* args[MAX_ARGS];
 } Command;

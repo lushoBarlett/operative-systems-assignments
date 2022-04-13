@@ -34,7 +34,7 @@ void pipe_command_chain(Command* command, int input_fd, int current, int amount)
 		}
 
 		if (is_child_process(process_id)) {
-			dup2(input_fd, IN);
+			set_stdin(input_fd);
 			execute_command(command);
 		}
 
@@ -58,8 +58,8 @@ void pipe_command_chain(Command* command, int input_fd, int current, int amount)
 	}
 
 	if (is_child_process(process_id)) {
-		dup2(input_fd, IN);
-		dup2(pipefd[OUT], OUT);
+		set_stdin(input_fd);
+		set_stdout(pipefd[OUT]);
 		close(pipefd[IN]);
 		execute_command(command);
 	}
