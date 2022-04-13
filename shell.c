@@ -35,10 +35,7 @@ void pipe_command_chain(Command* command, int input_fd, int current, int amount)
 
 		if (is_child_process(process_id)) {
 			dup2(input_fd, IN);
-
-			execvp(command->args[0], command->args);
-			printf("Error executing the command.\n");
-			exit(0);
+			execute_command(command);
 		}
 
 		if (input_fd != IN)
@@ -64,10 +61,7 @@ void pipe_command_chain(Command* command, int input_fd, int current, int amount)
 		dup2(input_fd, IN);
 		dup2(pipefd[OUT], OUT);
 		close(pipefd[IN]);
-
-		execvp(command->args[0], command->args);
-		printf("Error executing the command.\n");
-		exit(0);
+		execute_command(command);
 	}
 
 	if (input_fd != IN)

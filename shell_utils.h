@@ -35,6 +35,12 @@ void parse_command(char* buf, Command* command) {
 	command->args[i] = NULL;
 }
 
+void execute_command(Command* command){
+	execvp(command->args[0], command->args);
+	printf("Error executing the command.\n");
+	exit(1);
+}
+
 bool fork_failed(pid_t process_id) {
 	return process_id == -1;
 }

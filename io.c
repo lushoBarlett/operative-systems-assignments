@@ -29,12 +29,6 @@ int open_file(char *filename) {
 	open(filename, O_CREAT | O_WRONLY, 0644);
 }
 
-
-void execute_command(Command* command, int fd){
-	dup2(fd,OUT);
-	execvp(command->args[0],command->args);
-}
-
 int main() {
 
 	while(1) {
@@ -64,9 +58,10 @@ int main() {
 		if (is_child_process(process_id)) {
 			if (!without_file) {
 				fd_newfile = open_file(filename);
-				execute_command(&command,fd_newfile);
+				dup2(fd_newfile, OUT);
 			}
-			execvp(command.args[0],command.args);
+			
+			execute_command(&command);
 		}
 
 		wait(NULL);
