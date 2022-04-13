@@ -57,3 +57,14 @@ bool is_parent_process(pid_t process_id) {
 bool is_child_process(pid_t process_id) {
 	return process_id == 0;
 }
+
+pid_t require_fork() {
+	pid_t process_id = fork();
+
+	if (fork_failed(process_id)) {
+		printf("Creation of child process was not possible. Terminating...\n");
+		exit(1);
+	}
+
+	return process_id;
+}

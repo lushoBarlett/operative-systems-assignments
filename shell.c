@@ -26,12 +26,7 @@ int parse_commands(char* buf, Command* commands) {
 void pipe_command_chain(Command* command, int input_fd, int current, int amount) {
 
 	if (current == amount - 1) {
-		pid_t process_id = fork();
-
-		if (fork_failed(process_id)) {
-			printf("Shell error.\n");
-			return;
-		}
+		pid_t process_id = require_fork();
 
 		if (is_child_process(process_id)) {
 			set_stdin(input_fd);
@@ -50,12 +45,7 @@ void pipe_command_chain(Command* command, int input_fd, int current, int amount)
 	if (pipe(pipefd))
 		exit(-1);
 
-	pid_t process_id = fork();
-
-	if (fork_failed(process_id)) {
-		printf("Shell error.\n");
-		return;
-	}
+	pid_t process_id = require_fork();
 
 	if (is_child_process(process_id)) {
 		set_stdin(input_fd);

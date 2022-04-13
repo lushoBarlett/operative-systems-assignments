@@ -46,12 +46,7 @@ int main() {
 			break;
 		}
 
-		pid_t process_id = fork();
-
-		if (fork_failed(process_id)) {
-			printf("Shell error.\n");
-			return 0;
-		}
+		pid_t process_id = require_fork();
 
 		if (is_child_process(process_id)) {
 			if (!without_file) {
