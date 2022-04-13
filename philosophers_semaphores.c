@@ -1,61 +1,47 @@
-#include <stdio.h>
-#include <unistd.h>
-#include <stdlib.h>
 #include <pthread.h>
 #include <semaphore.h>
 
-#define N_FILOSOFOS 5
-#define ESPERA 5000000
+#include "philosopher_utils.h"
 
-pthread_mutex_t tenedor[N_FILOSOFOS];
-sem_t sem;
-
-void pensar(int i) {
-    printf("Filosofo %d pensando...\n",i);
-    usleep(ESPERA/100);
-}
-
-
-void comer(int i) {
-    printf("Filosofo %d comiendo...\n",i);
-    usleep(ESPERA/100);
-}
-
+pthread_mutex_t tenedores[N_FILOSOFOS];
+sem_t comedores_disponibles;
 
 void tomar_tenedores(int i) {
-    pthread_mutex_lock(&tenedor[i]); /* Toma el tenedor a su derecha */
-    pthread_mutex_lock(&tenedor[(i+1)%N_FILOSOFOS]); /* Toma el tenedor a su izquierda */
+	pthread_mutex_lock(&tenedores[i]);
+	pthread_mutex_lock(&tenedores[izquierda(i)]);
 }
-
 
 void dejar_tenedores(int i) {
-    pthread_mutex_unlock(&tenedor[i]); /* Deja el tenedor de su derecha */
-    pthread_mutex_unlock(&tenedor[(i+1)%N_FILOSOFOS]); /* Deja el tenedor de su izquierda */
+	pthread_mutex_unlock(&tenedores[i]);
+	pthread_mutex_unlock(&tenedores[izquierda(i)]);
 }
 
+void* filosofo(void* arg) {
+	int i = (intptr_t)arg;
 
-void *filosofo(void *arg) {
-    int i = (int) arg;
-    for (;;) {
-        sem_wait(&sem);
-        tomar_tenedores(i);
-        comer(i);
-        dejar_tenedores(i);
-        sem_post(&sem);
-        pensar(i);
-    }
+	while(1) {
+		sem_wait(&comedores_disponibles);
+		tomar_tenedores(i);
+		comer(i);
+		dejar_tenedores(i);
+		sem_post(&comedores_disponibles);
+		pensar(i);
+	}
 }
 
+int main() {
+	int i;
+	pthread_t filosofos[N_FILOSOFOS];
 
-int main()
-{
-    int i;
-    pthread_t filo[N_FILOSOFOS];
-    sem_init(&sem,0,N_FILOSOFOS-1);
-    for (i=0;i<N_FILOSOFOS;i++)
-        pthread_mutex_init(&tenedor[i], NULL);
-    for (i=0;i<N_FILOSOFOS;i++)
-        pthread_create(&filo[i], NULL, filosofo, (void *)i);
-    pthread_join(filo[0], NULL);
-    return 0;
+	sem_init(&comedores_disponibles, 0, N_FILOSOFOS - 1);
+
+	for (i = 0; i < N_FILOSOFOS; i++)
+		pthread_mutex_init(&tenedores[i], NULL);
+
+	for (i = 0; i < N_FILOSOFOS; i++)
+		pthread_create(&filosofos[i], NULL, filosofo, (void*)(intptr_t)i);
+
+	pthread_join(filosofos[0], NULL);
+
+	return 0;
 }

@@ -7,10 +7,10 @@ shell: shell.c shell_utils.h
 smokers_same_agent: smokers_same_agent.c
 	gcc smokers_same_agent.c -o smokers_same_agent -pthread
 
-philosophers_semaphores: philosophers_semaphores.c
+philosophers_semaphores: philosophers_semaphores.c philosopher_utils.h
 	gcc philosophers_semaphores.c -o philosophers_semaphores -pthread
 
-philosophers_leftist: philosophers_leftist.c
+philosophers_leftist: philosophers_leftist.c philosopher_utils.h
 	gcc philosophers_leftist.c -o philosophers_leftist -pthread
 
 io: io.c shell_utils.h

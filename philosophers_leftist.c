@@ -3,29 +3,11 @@
 #include <stdlib.h>
 #include <unistd.h>
 
-#define N_FILOSOFOS 5
-#define ESPERA 5000000
+#include "philosopher_utils.h"
+
 #define ZURDO 0
 
 pthread_mutex_t tenedores[N_FILOSOFOS];
-
-int izquierda(int i) {
-    return (i + 1) % N_FILOSOFOS;
-}
-
-void esperar() {
-	usleep(random() % ESPERA);
-}
-
-void pensar(int i) {
-	printf("Filosofo %d pensando...\n", i);
-	esperar();
-}
-
-void comer(int i) {
-	printf("Filosofo %d comiendo...\n", i);
-	esperar();
-}
 
 void tomar_tenedores(int i) {
 	int tenedor1, tenedor2;
