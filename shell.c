@@ -39,27 +39,23 @@ void pipe_command_chain(Command* command, int input_fd, int current, int amount)
 		return;
 	}
 
-	int pipefd[2];
-	
-	// TODO: handle pipe errors better
-	if (pipe(pipefd))
-		exit(-1);
+	Pipe pipe = require_pipe();
 
 	pid_t process_id = require_fork();
 
 	if (is_child_process(process_id)) {
 		set_stdin(input_fd);
-		set_stdout(pipefd[OUT]);
-		close(pipefd[IN]);
+		set_stdout(pipe.out);
+		close(pipe.in);
 		execute_command(command);
 	}
 
 	if (input_fd != IN)
 		close(input_fd);
 
-	close(pipefd[OUT]);
+	close(pipe.out);
 
-	pipe_command_chain(command + 1, pipefd[IN], current + 1, amount);
+	pipe_command_chain(command + 1, pipe.in, current + 1, amount);
 }
 
 int main() {

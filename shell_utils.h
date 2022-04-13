@@ -18,6 +18,11 @@ typedef struct Command {
 	char* args[MAX_ARGS];
 } Command;
 
+typedef struct Pipe {
+	int in;
+	int out;
+} Pipe;
+
 bool is_exit_command(Command* command) {
 	return strcmp(command->args[0], "exit") == 0;
 }
@@ -67,4 +72,19 @@ pid_t require_fork() {
 	}
 
 	return process_id;
+}
+
+Pipe require_pipe() {
+	Pipe result;
+	int pipefd[2];
+	
+	if (pipe(pipefd)) {
+		printf("Creation of pipe was not possible. Terminating...\n");
+		exit(1);
+	}
+
+	result.in = pipefd[IN];
+	result.out = pipefd[OUT];
+
+	return result;
 }
