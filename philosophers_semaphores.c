@@ -16,16 +16,20 @@ void dejar_tenedores(int i) {
 	pthread_mutex_unlock(&tenedores[izquierda(i)]);
 }
 
+useconds_t tiempo_de_espera() {
+	return ESPERA / 100;
+}
+
 void* filosofo(void* arg) {
 	int i = (intptr_t)arg;
 
 	while(1) {
 		sem_wait(&comedores_disponibles);
 		tomar_tenedores(i);
-		comer(i);
+		comer(i, tiempo_de_espera());
 		dejar_tenedores(i);
 		sem_post(&comedores_disponibles);
-		pensar(i);
+		pensar(i, tiempo_de_espera());
 	}
 }
 

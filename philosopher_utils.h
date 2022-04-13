@@ -11,16 +11,12 @@ int izquierda(int i) {
     return (i + 1) % N_FILOSOFOS;
 }
 
-void esperar() {
-	usleep(random() % ESPERA);
-}
-
-void pensar(int i) {
+void pensar(int i, useconds_t tiempo) {
 	printf("Filosofo %d pensando...\n", i);
-	esperar();
+	usleep(tiempo);
 }
 
-void comer(int i) {
+void comer(int i, useconds_t tiempo) {
 	printf("Filosofo %d comiendo...\n", i);
-	esperar();
+	usleep(tiempo);
 }

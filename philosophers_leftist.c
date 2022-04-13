@@ -1,7 +1,4 @@
 #include <pthread.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <unistd.h>
 
 #include "philosopher_utils.h"
 
@@ -29,14 +26,18 @@ void dejar_tenedores(int i) {
 	pthread_mutex_unlock(&tenedores[izquierda(i)]);
 }
 
+useconds_t tiempo_de_espera() {
+	return random() % ESPERA;
+}
+
 void* filosofo(void* arg) {
 	int i = (intptr_t)arg;
 
 	while(1) {
 		tomar_tenedores(i);
-		comer(i);
+		comer(i, tiempo_de_espera());
 		dejar_tenedores(i);
-		pensar(i);
+		pensar(i, tiempo_de_espera());
 	}
 }
 
