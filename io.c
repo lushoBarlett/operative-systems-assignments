@@ -23,10 +23,13 @@ int parse_line(char *buf, Command *command, char **filename){
 	return (*filename == NULL);
 }
 
+char* trim_spaces(char* filename) {
+	while (*filename++ == ' ');
+	return --filename;
+}
+
 int open_file(char *filename) {
-	if (*filename == ' ')
-		filename++;
-	open(filename, O_CREAT | O_WRONLY, 0644);
+	open(trim_spaces(filename), O_CREAT | O_WRONLY, 0644);
 }
 
 int main() {
