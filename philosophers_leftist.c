@@ -9,13 +9,13 @@ pthread_mutex_t tenedores[N_FILOSOFOS];
 void tomar_tenedores(int i) {
 	int tenedor1, tenedor2;
 
-    if (i == ZURDO) {
+	if (i == ZURDO) {
 		tenedor1 = izquierda(i);
 		tenedor2 = i;
-    } else {
+	} else {
 		tenedor1 = i;
 		tenedor2 = izquierda(i);
-    }
+	}
 
 	pthread_mutex_lock(&tenedores[tenedor1]);
 	pthread_mutex_lock(&tenedores[tenedor2]);
@@ -33,7 +33,7 @@ useconds_t tiempo_de_espera() {
 void* filosofo(void* arg) {
 	int i = (intptr_t)arg;
 
-	while(1) {
+	while (1) {
 		tomar_tenedores(i);
 		comer(i, tiempo_de_espera());
 		dejar_tenedores(i);
