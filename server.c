@@ -9,54 +9,62 @@
 #include <unistd.h>
 
 pthread_mutex_t mutex;
+int UID = 0;
 
-/*
- * Para probar, usar netcat. Ej:
- *
- *      $ nc localhost 4040
- *      NUEVO
- *      0
- *      NUEVO
- *      1
- *      CHAU
- */
+int atomic_increment() {
+	pthread_mutex_lock(&mutex);
+	
+	int id = UID++;
+	
+	pthread_mutex_unlock(&mutex);
+	
+	return id;
+}
 
-void quit(char* error_message) {
+void quit(const char* error_message) {
 	perror(error_message);
+
 	abort();
 }
 
-int require_accept(int lsock) {
-	int csock = accept(lsock, NULL, NULL);
-	if (csock < 0)
-		quit("accept");
-	return csock;
-}
-
-int U = 0;
-
 int fd_readline(char* buf, int fd) {
-	int rc;
-	int i = 0;
+	int read_result;
+	int i;
 
-	while ((rc = read(fd, buf + i, 1)) > 0) {
+	for (i = 0; (read_result = read(fd, buf + i, 1)) > 0; i++)
 		if (buf[i] == '\n')
 			break;
-		i++;
-	}
 
-	if (rc < 0)
-		return rc;
+	if (read_result < 0)
+		return read_result;
 
 	buf[i] = 0;
 	return i;
 }
 
 int require_fd_readline(char* buf, int fd) {
-	int rc = fd_readline(buf, fd);
-	if (rc < 0)
-		quit("read... raro");
-	return rc;
+	int read_result = fd_readline(buf, fd);
+
+	if (read_result < 0)
+		quit("read");
+
+	return read_result;
+}
+
+void reply_with(int csock, int client_id) {
+	char reply[20];
+	
+	sprintf(reply, "%d\n", client_id);
+	
+	write(csock, reply, strlen(reply));
+}
+
+int is_new_request(const char* buf) {
+	return !strcmp(buf, "NUEVO");
+}
+
+int is_close_request(const char* buf) {
+	return !strcmp(buf, "CHAU");
 }
 
 void* handle_conn(void* arg) {
@@ -67,27 +75,74 @@ void* handle_conn(void* arg) {
 		int rc = require_fd_readline(buf, csock);
 
 		if (rc == 0) {
-			/* linea vacia, se cerró la conexión */
 			close(csock);
 			return NULL;
 		}
 
-		if (!strcmp(buf, "NUEVO")) {
-			char reply[20];
-			pthread_mutex_lock(&mutex);  // LOCK
-			sprintf(reply, "%d\n", U);
-			U++;
-			pthread_mutex_unlock(&mutex);  // UNLOCK
-			write(csock, reply, strlen(reply));
-		} else if (!strcmp(buf, "CHAU")) {
+		if (is_close_request(buf)) {
 			close(csock);
 			return NULL;
+		}
+
+		if (is_new_request(buf)) {
+			int client_id = atomic_increment();
+			reply_with(csock, client_id);
 		}
 	}
 }
 
+int require_accept(int lsock) {
+	int csock = accept(lsock, NULL, NULL);
+	
+	if (csock < 0)
+		quit("accept");
+
+	return csock;
+}
+
+int require_socket() {
+	int lsock = socket(AF_INET, SOCK_STREAM, 0);
+
+	if (lsock < 0)
+		quit("socket");
+
+	int yes = 1;
+
+	if (setsockopt(lsock, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof yes) == 1)
+		quit("setsockopt");
+
+	return lsock;
+}
+
+int require_bind(int lsock, int port) {
+	struct sockaddr_in sa;
+
+	sa.sin_family = AF_INET;
+	sa.sin_port = htons(port);
+	sa.sin_addr.s_addr = htonl(INADDR_ANY);
+
+	if (bind(lsock, (const struct sockaddr*)&sa, sizeof sa) < 0)
+		quit("bind");
+}
+
+int require_listen(int lsock, int connections) { 
+	if (listen(lsock, connections) < 0)
+		quit("listen");
+}
+
+int configure_lsock() {
+	int lsock = require_socket();
+	
+	require_bind(lsock, 4040);
+	
+	require_listen(lsock, 10);
+	
+	return lsock;
+}
+
 void wait_for_clients(int lsock) {
 	pthread_t s;
+
 	int csock = require_accept(lsock);
 
 	pthread_create(&s, NULL, handle_conn, (void*)(intptr_t)csock);
@@ -95,42 +150,10 @@ void wait_for_clients(int lsock) {
 	wait_for_clients(lsock);
 }
 
-/* Crea un socket de escucha en puerto 4040 TCP */
-int mk_lsock() {
-	struct sockaddr_in sa;
-	int lsock;
-	int rc;
-	int yes = 1;
-
-	/* Crear socket */
-	lsock = socket(AF_INET, SOCK_STREAM, 0);
-	if (lsock < 0)
-		quit("socket");
-
-	/* Setear opción reuseaddr... normalmente no es necesario */
-	if (setsockopt(lsock, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof yes) == 1)
-		quit("setsockopt");
-
-	sa.sin_family = AF_INET;
-	sa.sin_port = htons(4040);
-	sa.sin_addr.s_addr = htonl(INADDR_ANY);
-
-	/* Bindear al puerto 4040 TCP, en todas las direcciones disponibles */
-	rc = bind(lsock, (struct sockaddr*)&sa, sizeof sa);
-	if (rc < 0)
-		quit("bind");
-
-	/* Setear en modo escucha */
-	rc = listen(lsock, 10);
-	if (rc < 0)
-		quit("listen");
-
-	return lsock;
-}
-
 int main() {
-	int lsock;
-	lsock = mk_lsock();
+	int lsock = configure_lsock();
+	
 	pthread_mutex_init(&mutex, NULL);
+	
 	wait_for_clients(lsock);
 }
