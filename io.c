@@ -9,42 +9,8 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 
+#include "shell_utils.h"
 
-#define MAX_LINE 1000
-#define MAX_ARGS 10
-
-#define OUT 1
-
-typedef struct Command {
-	char* args[MAX_ARGS];
-} Command;
-
-bool is_exit_command(Command* command) {
-	return strcmp((command->args)[0], "exit") == 0;
-}
-
-void prompt() {
-	printf(">> ");
-}
-
-void readline(char* buf) {
-	fgets(buf, MAX_LINE, stdin);
-	buf[strcspn(buf, "\r\n")] = 0;
-}
-
-void parse_command(char* buf, Command* command) {
-	char* argument_string = strtok(buf, " ");
-	int i = 0;
-
-	while (argument_string) {
-		command->args[i++] = argument_string;
-		argument_string = strtok(NULL, " ");
-	}
-
-	command->args[i] = NULL;
-}
-
-// Returns 0 if there is no filename, otherwise returns positive
 int parse_line(char *buf, Command *command, char **filename){
 	char* command_string;
 
@@ -57,29 +23,13 @@ int parse_line(char *buf, Command *command, char **filename){
 	return (*filename == NULL);
 }
 
-bool fork_failed(pid_t process_id) {
-	return process_id == -1;
+char* trim_spaces(char* filename) {
+	while (*filename++ == ' ');
+	return --filename;
 }
-
-bool is_parent_process(pid_t process_id) {
-	return process_id > 0;
-}
-
-bool is_child_process(pid_t process_id) {
-	return process_id == 0;
-}
-
 
 int open_file(char *filename) {
-	if (*filename == ' ')
-		filename++;
-	open(filename, O_CREAT | O_WRONLY, 0644);
-}
-
-
-void execute_command(Command* command, int fd){
-	dup2(fd,OUT);
-	execvp(command->args[0],command->args);
+	open(trim_spaces(filename), O_CREAT | O_WRONLY, 0644);
 }
 
 int main() {
@@ -90,9 +40,7 @@ int main() {
 		char *filename;
 		int fd_newfile;
 
-		prompt();
-
-		readline(buf);
+		prompt(buf);
 
 		int without_file = parse_line(buf, &command, &filename);
 
@@ -101,20 +49,15 @@ int main() {
 			break;
 		}
 
-
-		pid_t process_id = fork();
-
-		if (fork_failed(process_id)) {
-			printf("Shell error.\n");
-			return 0;
-		}
+		pid_t process_id = require_fork();
 
 		if (is_child_process(process_id)) {
 			if (!without_file) {
 				fd_newfile = open_file(filename);
-				execute_command(&command,fd_newfile);
+				set_stdout(fd_newfile);
 			}
-			execvp(command.args[0],command.args);
+			
+			execute_command(&command);
 		}
 
 		wait(NULL);
