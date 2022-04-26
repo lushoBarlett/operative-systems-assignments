@@ -1,27 +1,32 @@
 #include <pthread.h>
 
-typedef struct barrier {
-  int n, n_max;
-  pthread_mutex_t lk;
-  pthread_cond_t cv;
-} barrier;
+typedef struct barrier_t {
+	int counter;
+	int counter_max;
 
-void wait(barrier *b) {
-  pthread_mutex_lock(&b->lk);
-  b->n++;
-  if (b->n == b->n_max) {
-    b->n = 0;
-    pthread_cond_broadcast(&b->cv);
-  } else {
-    pthread_cond_wait(&b->cv,&b->lk);
-  }
+	pthread_mutex_t lock;
+	pthread_cond_t condition_variable;
+} barrier_t;
 
-  pthread_mutex_unlock(&b->lk);
+void wait(barrier_t* barrier) {
+	pthread_mutex_lock(&barrier->lock);
+
+	barrier->counter++;
+	
+	if (barrier->counter == barrier->counter_max) {
+		barrier->counter = 0;
+		pthread_cond_broadcast(&barrier->condition_variable);
+	} else {
+		pthread_cond_wait(&barrier->condition_variable, &barrier->lock);
+	}
+
+	pthread_mutex_unlock(&barrier->lock);
 }
 
+void barrier_init(barrier_t* barrier, int counter_max) {
+	barrier->counter = 0;
+	barrier->counter_max = counter_max;
 
-void barrier_init(barrier *b, int n) {
-  b->n = 0;
-  b->n_max = n;
-  pthread_mutex_init(&b->lk, NULL);
+	pthread_mutex_init(&barrier->lock, NULL);
+	pthread_cond_init(&barrier->condition_variable, NULL);
 }
