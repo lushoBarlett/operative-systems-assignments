@@ -1,39 +1,27 @@
 #include <pthread.h>
 
-pthread_mutex_t reader, writer;
-int n_readers;
+struct read_write_lock_t {
 
+	/*
+	 * Locks the whole channel_write function
+	 * to prevent further writers from entering
+	 * before the current one leaves
+	 */
+	pthread_mutex_t reader;
 
-void write_lock() {
-	pthread_mutex_lock(&writer);
-}
+	pthread_mutex_t writer;
 
+	int reader_count;
+};
 
-void write_unlock() {
-	pthread_mutex_unlock(&writer);
-}
+typedef struct read_write_lock_t read_write_lock_t;
 
+void read_write_init(read_write_lock_t* rw_lock);
 
-void read_lock() {
-	pthread_mutex_lock(&reader);
-	if (!n_readers)
-		pthread_mutex_lock(&writer);
-	n_readers++;
-	pthread_mutex_unlock(&reader);
-}
+void write_lock(read_write_lock_t* rw_lock);
 
+void write_unlock(read_write_lock_t* rw_lock);
 
-void read_unlock() {
-	pthread_mutex_lock(&reader);
-	n_readers--;
-	if (!n_readers)
-		pthread_mutex_unlock(&writer);
-	pthread_mutex_unlock(&reader);
-}
+void read_lock(read_write_lock_t* rw_lock);
 
-
-void read_write_lock_init() {
-	pthread_mutex_init(&reader, NULL);
-	pthread_mutex_init(&writer, NULL);
-	n_readers = 0;
-}
+void read_unlock(read_write_lock_t* rw_lock);
