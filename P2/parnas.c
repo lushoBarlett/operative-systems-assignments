@@ -1,49 +1,40 @@
-#include <stdio.h>
-#include <unistd.h>
-#include <stdlib.h>
+#include "rwlock_write_preferring.h"
 #include <pthread.h>
+#include <stdio.h>
 
 #define M 5
 #define N 5
 #define ARRLEN 10240
 
 int arr[ARRLEN];
-pthread_mutex_t reader, writer;
-int n_readers;
 
 void* escritor(void* arg) {
 	int num = arg - (void*)0;
 
 	while (1) {
-		sleep(random() % 3);
+		//sleep(random() % 3);
 
-		pthread_mutex_lock(&writer);
+		write_lock();
 
 		printf("Escritor %d escribiendo\n", num);
 
 		for (int i = 0; i < ARRLEN; i++)
 			arr[i] = num;
 
-		pthread_mutex_unlock(&writer);
+		write_unlock();
 	}
 
 	return NULL;
 }
 
+
 void* lector(void *arg) {
-
-
 	int num = arg - (void*)0;
 
 	while (1) {
-		sleep(random() % 3);
+		//sleep(random() % 3);
 
-		pthread_mutex_lock(&reader);
-		if (!n_readers)
-			pthread_mutex_lock(&writer);
-		n_readers++;
-		pthread_mutex_unlock(&reader);
-
+		read_lock();
 
 		int v = arr[0];
 		int i;
@@ -56,12 +47,7 @@ void* lector(void *arg) {
 		else
 			printf("Lector %d, dato %d\n", num, v);
 
-		pthread_mutex_lock(&reader);
-		n_readers--;
-		if (!n_readers)
-			pthread_mutex_unlock(&writer);
-		pthread_mutex_unlock(&reader);
-
+		read_unlock();
 	}
 
 	return NULL;
@@ -69,9 +55,8 @@ void* lector(void *arg) {
 
 int main() {
 	pthread_t lectores[M], escritores[N];
-	pthread_mutex_init(&reader, NULL);
-	pthread_mutex_init(&writer, NULL);
-	n_readers = 0;
+
+    read_write_lock_init();
 
 	for (int i = 0; i < M; i++)
 		pthread_create(&lectores[i], NULL, lector, i + (void*)0);
