@@ -2,6 +2,7 @@
 #include <pthread.h>
 #include <stdbool.h>
 #include <math.h>
+#define _GNU_SOURCE
 
 #define N_VISITANTES 1000000
 #define N_PROCESOS 4
@@ -20,17 +21,22 @@ void init_arrays() {
 }
 
 int max_array (int *arr, int len){
-  if (len == 0)
-    return 0;
-  return fmax(*arr,max_array(arr+1,len-1));
+  int max = *arr;
+  for (int i = 1; i < len; i++) {
+    if (max < arr[i])
+      max = arr[i];
+  }
+  return max;
 }
 
 void lock(int i) {
   eligiendo[i] = true;
- //mfence
+  //mfence
+  asm volatile ("mfence");
   numero[i] = 1 + max_array(numero,N_PROCESOS);
   eligiendo[i] = false;
-//mfence
+  //mfence
+  asm volatile ("mfence");
   for (int j = 0; j < N_PROCESOS; j++){
     while (eligiendo[j]); // busy waiting
 
@@ -47,14 +53,12 @@ void unlock(int i){
 
 void *molinete(void *arg) {
     int num = arg - (void*)0;
-    printf("molinete %d\n", num);
     int i;
     for (i=0;i<N_VISITANTES;i++) {
         lock(num);
         visitantes++;
         unlock(num);
     }
-    printf("sale molinete %d\n",num );
 }
 
 int main() {
