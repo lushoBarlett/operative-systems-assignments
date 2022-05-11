@@ -1,17 +1,12 @@
+#include "block.h"
+
 #include <pthread.h>
 
 struct read_write_lock_t {
 
-	/*
-	 * Locks the whole channel_write function
-	 * to prevent further writers from entering
-	 * before the current one leaves
-	 */
-	pthread_mutex_t reader;
+	block_t readers;
 
 	pthread_mutex_t writer;
-
-	int reader_count;
 };
 
 typedef struct read_write_lock_t read_write_lock_t;

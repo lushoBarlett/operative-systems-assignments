@@ -1,15 +1,14 @@
+#include "block.h"
+
 #include <pthread.h>
 
 struct read_write_lock_t {
-	pthread_mutex_t reader_count_lk;
-	pthread_mutex_t wanna_write_lk;
+
+	block_t writers;
+
+	block_t readers;
+
 	pthread_mutex_t writer;
-
-	int wanna_write;
-	int reader_count;
-
-	pthread_cond_t last_reader_leaves;
-	pthread_cond_t no_writers;
 };
 
 typedef struct read_write_lock_t read_write_lock_t;
