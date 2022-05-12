@@ -9,7 +9,8 @@ enum action_type {
 
 struct action_t {
 	enum action_type type;
-	pthread_cond_t wake_up;
+	sem_t wake_up;
+	sem_t woken_up;
 };
 
 typedef struct action_t action_t;
@@ -17,7 +18,8 @@ typedef struct action_t action_t;
 action_t* new_action(enum action_type type) {
 	action_t* action = malloc(sizeof(*action));
 	action->type = type;
-	pthread_cond_init(&action->wake_up, NULL);
+	sem_init(&action->wake_up, 0, 0);
+	sem_init(&action->woken_up, 0, 0);
 	return action;
 }
 
@@ -36,7 +38,7 @@ void read_write_lock_init(read_write_lock_t* rw_lock) {
 	pthread_mutex_init(&rw_lock->lock, NULL);
 }
 
-void write_lock(read_write_lock_t* rw_lock) {
+void write_lock(read_write_lock_t* rw_lock, int num) {
 	pthread_mutex_lock(&rw_lock->lock);
 
 	if (writer_should_wait(rw_lock)) {
@@ -44,12 +46,17 @@ void write_lock(read_write_lock_t* rw_lock) {
 
 		enqueue(&rw_lock->queue, action);
 
-		pthread_cond_wait(&action->wake_up, &rw_lock->lock);
+		pthread_mutex_unlock(&rw_lock->lock);
+
+		sem_wait(&action->wake_up);
+		sem_post(&action->woken_up);
+
+	} else {
+		rw_lock->writer++;
+
+		pthread_mutex_unlock(&rw_lock->lock);
 	}
 
-	rw_lock->writer++;
-
-	pthread_mutex_unlock(&rw_lock->lock);
 }
 
 void read_lock(read_write_lock_t* rw_lock) {
@@ -60,37 +67,46 @@ void read_lock(read_write_lock_t* rw_lock) {
 
 		enqueue(&rw_lock->queue, action);
 
-		pthread_cond_wait(&action->wake_up, &rw_lock->lock);
+		pthread_mutex_unlock(&rw_lock->lock);
+
+		sem_wait(&action->wake_up);
+		sem_post(&action->woken_up);
+
+	} else {
+		rw_lock->readers++;
+
+		pthread_mutex_unlock(&rw_lock->lock);
 	}
+}
 
-	rw_lock->readers++;
+void wake_up(read_write_lock_t* rw_lock) {
+	action_t* action = dequeue(&rw_lock->queue);
 
-	pthread_mutex_unlock(&rw_lock->lock);
+	sem_post(&action->wake_up);
+	sem_wait(&action->woken_up);
+
+	free(action);
 }
 
 void dequeue_signal(read_write_lock_t* rw_lock) {
 
 	int readers_woken_up = 0;
 
-	while (&rw_lock->queue.size) {
+	while (rw_lock->queue.size) {
 		action_t* action = front(&rw_lock->queue);
 
-		if (action->type == action_read) {
-			dequeue(&rw_lock->queue);
+		if (action->type == action_write) {
+			if (!readers_woken_up) {
+				wake_up(rw_lock);
+				rw_lock->writer++;
+			}
 
-			pthread_cond_signal(&action->wake_up);
-
-			free(action);
-			readers_woken_up = 1;
-		}
-
-		else if (action->type == action_write && !readers_woken_up) {
-			dequeue(&rw_lock->queue);
-
-			pthread_cond_signal(&action->wake_up);
-
-			free(action);
 			break;
+
+		} else {
+			wake_up(rw_lock);
+			rw_lock->readers++;
+			readers_woken_up = 1;
 		}
 	}
 }

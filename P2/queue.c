@@ -1,7 +1,5 @@
 #include "queue.h"
 
-#include <assert.h>
-
 struct node_t {
 	void* value;
 	struct node_t* prev;
@@ -9,7 +7,7 @@ struct node_t {
 };
 
 static struct node_t* node(void* value, struct node_t* prev, struct node_t* next) {
-	struct node_t* new_node = (struct node_t*)malloc(sizeof(*new_node));
+	struct node_t* new_node = malloc(sizeof(*new_node));
 	new_node->value = value;
 	new_node->prev = prev;
 	new_node->next = next;
@@ -23,7 +21,7 @@ void queue_init(queue_t* queue) {
 
 void enqueue(queue_t* queue, void* value) {
 	struct node_t* target = node(value, NULL, queue->begin);
-	
+
 	if (queue->begin)
 		queue->begin->prev = target;
 
@@ -38,7 +36,6 @@ void enqueue(queue_t* queue, void* value) {
 void* dequeue(queue_t* queue) {
 	struct node_t* target = queue->end;
 
-	assert(queue->end);
 	queue->end = queue->end->prev;
 	queue->size--;
 
@@ -47,7 +44,6 @@ void* dequeue(queue_t* queue) {
 	else
 		queue->begin = NULL;
 
-	assert(target);
 	void* value = target->value;
 	free(target);
 
@@ -55,5 +51,5 @@ void* dequeue(queue_t* queue) {
 }
 
 void* front(queue_t* queue) {
-	return queue->end;
+	return queue->end->value;
 }

@@ -68,7 +68,7 @@ int main() {
 	read_write_lock_init(&rw_lock);
 
 	for (int i = 0; i < M; i++)
-		//pthread_create(&lectores[i], NULL, lector, i + (void*)0);
+		pthread_create(&lectores[i], NULL, lector, i + (void*)0);
 
 	for (int i = 0; i < N; i++)
 		pthread_create(&escritores[i], NULL, escritor, i + (void*)0);
