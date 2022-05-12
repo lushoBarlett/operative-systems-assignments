@@ -15,3 +15,5 @@ void queue_init(queue_t* queue);
 void enqueue(queue_t* queue, void* value);
 
 void* dequeue(queue_t* queue);
+
+void* front(queue_t* queue);

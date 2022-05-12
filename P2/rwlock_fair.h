@@ -1,12 +1,17 @@
-#include "block.h"
+#pragma once
+
+#include "queue.h"
 
 #include <pthread.h>
 
 struct read_write_lock_t {
 
-	block_t readers;
+	int readers;
+	int writer;
 
-	pthread_mutex_t writer;
+	queue_t queue;
+
+	pthread_mutex_t lock;
 };
 
 typedef struct read_write_lock_t read_write_lock_t;

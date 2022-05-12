@@ -53,3 +53,7 @@ void* dequeue(queue_t* queue) {
 
 	return value;
 }
+
+void* front(queue_t* queue) {
+	return queue->end;
+}

@@ -1,7 +1,5 @@
 #include "rwlock_write_preferring.h"
 
-#include <pthread.h>
-
 void read_write_lock_init(read_write_lock_t* rw_lock) {
 	block_init(&rw_lock->writers, 0);
 	block_init(&rw_lock->readers, 0);
@@ -13,7 +11,7 @@ void write_lock(read_write_lock_t* rw_lock) {
 
 	pthread_mutex_lock(&rw_lock->writer);
 
-	if (block_counter(&rw_lock->readers) > 0)
+	while (block_counter(&rw_lock->readers) > 0)
 		block_wait(&rw_lock->readers, &rw_lock->writer);
 }
 

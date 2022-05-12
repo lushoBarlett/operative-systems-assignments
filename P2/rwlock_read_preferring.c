@@ -1,8 +1,6 @@
 #include "rwlock_read_preferring.h"
 
-#include <pthread.h>
-
-void read_write_init(read_write_lock_t* rw_lock) {
+void read_write_lock_init(read_write_lock_t* rw_lock) {
 	block_init(&rw_lock->readers, 0);
 	pthread_mutex_init(&rw_lock->writer, NULL);
 }
