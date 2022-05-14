@@ -3,61 +3,31 @@
 #include <semaphore.h>
 
 struct cond_var {
-  sem_t condition;      // Semaphore to wait for the condition to happen
-  sem_t leaving;        // Indicates that the signal has been consumed
-  int waiting;          // Number of threads waiting for a signal
-  pthread_mutex_t lock; // To preserve variable waiting
+  /*
+   * Blocks until a post is done in function signal or broadcast
+   */
+  sem_t condition;
+
+  /*
+   * Aknowledges that a signal was received
+   */
+  sem_t leaving;
+
+  /*
+   * Number of threads blocked, waiting to receive a signal
+   */
+  int waiting;
+
+  /*
+   * To ensure the synchronization of all functions
+   */
+  pthread_mutex_t lock;
 };
 
+void cond_var_init(struct cond_var *);
 
-void cv_wait(struct cond_var *cv, pthread_mutex_t *lk) {
-  pthread_mutex_lock(&cv->lock);
+void cv_wait(struct cond_var *, pthread_mutex_t *);
 
-  pthread_mutex_unlock(lk);
-  cv->waiting++;
+void cv_signal(struct cond_var *);
 
-  pthread_mutex_unlock(&cv->lock);
-
-  sem_wait(&cv->condition);
-  sem_post(&cv->leaving);
-
-  pthread_mutex_lock(lk);
-}
-
-
-void cv_signal(struct cond_var *cv) {
-  pthread_mutex_lock(&cv->lock);
-
-  if (cv->waiting > 0) {
-    cv->waiting--;
-    sem_post(&cv->condition);
-    sem_wait(&cv->leaving);
-  }
-
-  pthread_mutex_unlock(&cv->lock);
-}
-
-
-void cv_broadcast(struct cond_var *cv) {
-  pthread_mutex_lock(&cv->lock);
-
-  int n = cv->waiting;
-
-  for (int i = 0; i < n; i++)
-    sem_post(&cv->condition);
-
-  for (int i = 0; i < n; i++)
-    sem_wait(&cv->leaving);
-
-  cv->waiting = 0;
-
-  pthread_mutex_unlock(&cv->lock);
-}
-
-
-void cond_var_init(struct cond_var* cv) {
-  sem_init(&cv->condition, 0, 0);
-  sem_init(&cv->leaving, 0, 0);
-  cv->waiting = 0;
-  pthread_mutex_init(&cv->lock, NULL);
-}
+void cv_broadcast(struct cond_var *);
