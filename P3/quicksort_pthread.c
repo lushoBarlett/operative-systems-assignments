@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include <assert.h>
 
-#define ARRAY_SIZE 1000000
+#define ARRAY_SIZE 30000
 
 int array[ARRAY_SIZE];
 
@@ -40,13 +40,13 @@ void quicksort(int* array, int n) {
 
 	int m = partition(array, n);
 
-	quicksort(&array[0], m);
-
 	pthread_t second_half_worker;
 
 	qs_args_t args = { &array[m + 1], n - (m + 1) };
 
 	pthread_create(&second_half_worker, NULL, pthread_quicksort_frontend, (void*)&args);
+
+	quicksort(&array[0], m);
 
 	pthread_join(second_half_worker, NULL);
 }

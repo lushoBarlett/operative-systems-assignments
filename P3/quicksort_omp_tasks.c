@@ -1,8 +1,11 @@
 #include <pthread.h>
 #include <stdlib.h>
 #include <assert.h>
+#include <omp.h>
 
-#define ARRAY_SIZE 1000000
+#include "timing.h"
+
+#define ARRAY_SIZE 50000000
 
 int array[ARRAY_SIZE];
 
@@ -27,20 +30,35 @@ int partition(int* array, int n) {
 	return middle;
 }
 
-void quicksort(int* array, int n) {
+void squicksort_algorithm(int* array, int n) {
 	if (n < 2)
 		return;
 
 	int m = partition(array, n);
 
-	#pragma omp single nowait
-	{
-		#pragma omp task
-		quicksort(&array[0], m);
+	squicksort_algorithm(&array[0], m);
+	squicksort_algorithm(&array[m + 1], n - (m + 1));
+}
 
-		quicksort(&array[m + 1], n - (m + 1));
+void quicksort_algorithm(int* array, int n) {
+	if (0 && n < 1000) {
+		squicksort_algorithm(array, n);
+		return;
 	}
-	#pragma omp taskwait
+	if (n < 2) return;
+
+	int m = partition(array, n);
+
+  #pragma omp task
+	quicksort_algorithm(&array[0], m);
+
+	quicksort_algorithm(&array[m + 1], n - (m + 1));
+}
+
+void quicksort(int* array, int n) {
+	#pragma omp parallel
+	#pragma omp single
+	quicksort_algorithm(array, n);
 }
 
 void init_array() {
@@ -56,9 +74,7 @@ void assert_is_sorted() {
 int main() {
 	init_array();
 
-	#pragma omp parallel
-	#pragma omp single
-	quicksort(array, ARRAY_SIZE);
+	TIME_void(quicksort(array, ARRAY_SIZE),NULL);
 
 	assert_is_sorted();
 

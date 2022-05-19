@@ -2,7 +2,9 @@
 #include <stdlib.h>
 #include <assert.h>
 
-#define ARRAY_SIZE 1000000
+#include "timing.h"
+
+#define ARRAY_SIZE 10000000
 
 int array[ARRAY_SIZE];
 
@@ -50,7 +52,7 @@ void assert_is_sorted() {
 int main() {
 	init_array();
 
-	quicksort(array, ARRAY_SIZE);
+	TIME_void(quicksort(array, ARRAY_SIZE),NULL);
 
 	assert_is_sorted();
 

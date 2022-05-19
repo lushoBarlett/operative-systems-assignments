@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <omp.h>
+#include <limits.h>
 
 #define ARRAY_SIZE (int)5e8
 
@@ -13,7 +14,7 @@ void init_array() {
 int main() {
 	init_array();
 
-	int minimum;
+	int minimum = INT_MAX;
 
 	#pragma omp parallel for reduction(min: minimum)
 	for (size_t i = 0; i < ARRAY_SIZE; i++)

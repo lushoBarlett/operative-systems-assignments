@@ -1,6 +1,9 @@
 #include <pthread.h>
 #include <stdlib.h>
 #include <assert.h>
+#include <omp.h>
+
+#include "timing.h"
 
 #define ARRAY_SIZE 1000000
 
@@ -28,12 +31,13 @@ int partition(int* array, int n) {
 }
 
 void quicksort(int* array, int n) {
+
 	if (n < 2)
 		return;
 
 	int m = partition(array, n);
 
-	#pragma omp sections
+	#pragma omp parallel sections
 	{
 		#pragma omp section
 		quicksort(&array[0], m);
@@ -56,8 +60,7 @@ void assert_is_sorted() {
 int main() {
 	init_array();
 
-	#pragma omp parallel
-	quicksort(array, ARRAY_SIZE);
+	TIME_void(quicksort(array, ARRAY_SIZE),NULL);
 
 	assert_is_sorted();
 

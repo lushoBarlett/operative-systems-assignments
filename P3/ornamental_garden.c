@@ -13,14 +13,9 @@ void molinete() {
 }
 
 int main() {
-	#pragma omp parallel num_threads(2)
-	{
-		#pragma omp single nowait
-		molinete();
 
-		#pragma omp single nowait
-		molinete();
-	}
+  #pragma omp parallel
+	molinete();
 
 	printf("Hoy hubo %d visitantes!\n", visitantes);
 	return 0;
