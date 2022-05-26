@@ -4,7 +4,7 @@
 
 #include "timing.h"
 
-#define ARRAY_SIZE 10000000
+#define ARRAY_SIZE 50000000
 
 int array[ARRAY_SIZE];
 

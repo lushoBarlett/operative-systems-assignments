@@ -41,15 +41,14 @@ void squicksort_algorithm(int* array, int n) {
 }
 
 void quicksort_algorithm(int* array, int n) {
-	if (0 && n < 1000) {
+	if (n < 10000) {
 		squicksort_algorithm(array, n);
 		return;
 	}
-	if (n < 2) return;
 
 	int m = partition(array, n);
 
-  #pragma omp task
+	#pragma omp task
 	quicksort_algorithm(&array[0], m);
 
 	quicksort_algorithm(&array[m + 1], n - (m + 1));
