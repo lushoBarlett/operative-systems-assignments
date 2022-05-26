@@ -4,7 +4,7 @@
 
 #include "timing.h"
 
-#define ARRAY_SIZE 1000000
+#define ARRAY_SIZE 5000000
 
 int array[ARRAY_SIZE];
 
@@ -36,9 +36,27 @@ void merge(int* array, int left, int mid, int right) {
 		array[k++] = aux[j++];
 }
 
+void seq_msort(int* array, int begin, int end) {
+	if (begin >= end)
+		return;
+
+	int mid = (begin + end) / 2;
+
+	seq_msort(array, begin, mid);
+
+	seq_msort(array, mid + 1, end);
+
+	merge(array, begin, mid, end);
+}
+
 void mergesort_algorithm(int* array, int begin, int end) {
 	if (begin >= end)
 		return;
+
+	if (end - begin < 1000) {
+		seq_msort(array, begin, end);
+		return;
+	}
 
 	int mid = (begin + end) / 2;
 
