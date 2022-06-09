@@ -2,6 +2,7 @@
 
 -export([server/0]).
 
+% encuentra la primera ocurrencia de NUEVO\n o CHAU\n
 firstOccurrence(Rec) ->
 	N = string:str(Rec,"NUEVO\n"),
 	C = string:str(Rec,"CHAU\n"),
@@ -9,10 +10,8 @@ firstOccurrence(Rec) ->
 	    (N > 0) and (C == 0) -> {nuevo,N};
 	    (N == 0) and (C > 0) -> chau;
 	    (N == 0) and (C == 0) -> nada;
-	    true -> if
-			N < C -> {nuevo,N};
-			true -> chau
-		    end
+	    N < C -> {nuevo,N};
+	    true -> chau
 	end.
 
 discardPrefix(Rec, N, Word) ->
