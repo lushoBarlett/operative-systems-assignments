@@ -15,7 +15,7 @@ firstOccurrence(Rec) ->
 		    end
 	end.
 
-cut(Rec, N, Word) ->
+discardPrefix(Rec, N, Word) ->
 	string:slice(Rec,N + string:length(Word) - 1).
 
 counter(N) ->
@@ -58,7 +58,7 @@ decode(Socket, Rec, Counter) ->
 	case firstOccurrence(Rec) of
 		{nuevo, N} -> 
 			sendCounter(Counter, Socket),
-			Remaining = cut(Rec, N, "NUEVO\n"),
+			Remaining = discardPrefix(Rec, N, "NUEVO\n"),
 			decode(Socket, Remaining, Counter);
 		chau ->
 			gen_tcp:shutdown(Socket, read_write);
@@ -67,5 +67,5 @@ decode(Socket, Rec, Counter) ->
 
 sendCounter(Counter, Socket) ->
 	Id = receive_id_from(Counter),
-	StringId = integer_to_list(Id),
+	StringId = string:concat(integer_to_list(Id),"\n"),
 	gen_tcp:send(Socket, StringId).

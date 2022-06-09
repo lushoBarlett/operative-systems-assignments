@@ -15,12 +15,12 @@ randfail() ->
 
 hello() ->
 	wait(1000),
-	io:fwrite("Hello ~p~n", [randfail()]),
+	io:fwrite("Hello~p~n", [randfail()]),
 	?MODULE:hello().
 
 parent() ->
-	spawn_link(fun () -> hello() end),
 	process_flag(trap_exit, true),
+	spawn_link(fun () -> ?MODULE:hello() end),
 	receive
 		{'EXIT', _Pid, _Reason} ->
 			parent()

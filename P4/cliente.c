@@ -7,8 +7,10 @@
 #include <time.h>
 #include <errno.h>
 
+#include <assert.h>
+
 #define BUFF_SIZE 1024
-#define N 200
+#define N 20000
 
 int main() {
 	int sock[N], cto, i;
@@ -21,7 +23,7 @@ int main() {
 	servaddr.sin_port = htons(8000);
 	inet_pton(AF_INET, "127.0.0.1", &servaddr.sin_addr);
 	tsp.tv_sec = 0;
-	tsp.tv_nsec = 100000;
+	tsp.tv_nsec = 1000000;
 
 	for (i = 0; i < N; i++) {
 		int rc;
@@ -42,9 +44,14 @@ int main() {
 		 */
 		{
 			struct sockaddr_in clientaddr;
-			int portnum = i % 10000 + 10000;
-			int ipaddrnum = i / 10000 + 10;
+			int portnum = i % 1001 + 10000;
+			int ipaddrnum = i / 1000 + 10;
 			char ipaddr[32];
+
+			int yes = 1;
+
+			if (setsockopt(sock[i], SOL_SOCKET, SO_REUSEADDR, &yes, sizeof yes) == 1)
+				assert(0);
 
 			memset(&clientaddr, 0, sizeof(clientaddr));
 			clientaddr.sin_family = AF_INET;

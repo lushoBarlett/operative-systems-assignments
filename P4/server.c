@@ -133,7 +133,7 @@ int require_listen(int lsock, int connections) {
 int configure_lsock() {
 	int lsock = require_socket();
 	
-	require_bind(lsock, 4040);
+	require_bind(lsock, 8000);
 	
 	require_listen(lsock, 10);
 	
