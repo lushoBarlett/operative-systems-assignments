@@ -8,6 +8,7 @@ waitForUnlock() ->
 		unlock -> ok
 	end.
 
+% representa la estructura de un lock
 lockingLoop() ->
 	receive
 		{lock, PID} -> 
@@ -20,6 +21,7 @@ lockingLoop() ->
 createLock () ->
 	spawn(?MODULE, lockingLoop, []).
 
+% avisa al lock que esta en espera, y espera a que le manden el mensaje run
 lock (L) ->
 	L ! {lock, self()},
 	receive
@@ -37,6 +39,9 @@ waitForPost() ->
 		post -> ok
 	end.
 
+% si el semaforo vale 0, espera a que haya un post
+% si no, lo decrementa y avanza
+% retorna el nuevo contador
 waitingProcedure(Counter) ->
 	if
 		(Counter == 0) ->
@@ -47,6 +52,8 @@ waitingProcedure(Counter) ->
 	end,
 	NewCounter.
 
+% representa la estructura del semaforo.
+% recibe y maneja las operaciones post, wait y destroy
 semLoop(Counter) ->
 	receive
 		post -> semLoop(Counter + 1);
@@ -63,6 +70,8 @@ createSem (N) ->
 destroySem (S) ->
 	S ! destroy.
 
+% avisa al semaforo que esta en espera y luego espera a recibir
+% el mensaje run del semaforo
 semP (S) ->
 	S ! {wait, self()},
 	receive
