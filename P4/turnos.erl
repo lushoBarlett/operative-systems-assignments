@@ -17,6 +17,7 @@ firstOccurrence(Rec) ->
 discardPrefix(Rec, N, Word) ->
 	string:slice(Rec,N + string:length(Word) - 1).
 
+% Mantiene un contador para devolver IDs unicos
 counter(N) ->
 	receive
 		Receiver ->
@@ -24,6 +25,7 @@ counter(N) ->
 			counter(N + 1)
 	end.
 
+% Pide un ID al contador
 receive_id_from(Counter) ->
 	Counter ! self(),
 	receive
@@ -36,9 +38,12 @@ server() ->
 	wait_connect(ListenSocket, Counter).
 
 wait_connect(ListenSocket, Counter) ->
-	{ok, Socket} = gen_tcp:accept(ListenSocket),
-	spawn(fun() -> wait_connect(ListenSocket, Counter) end),
-	get_request(Socket, Counter, ""),
+	case gen_tcp:accept(ListenSocket) of
+		{ok, Socket} -> 
+				spawn(fun() -> wait_connect(ListenSocket, Counter) end),
+				get_request(Socket, Counter, "");
+		{error, Reason} -> io:fwrite("error, reason: ~s~n", [Reason])
+	end,
 	ok.
 
 get_request(Socket, Counter, Partial) ->
@@ -50,9 +55,11 @@ get_request(Socket, Counter, Partial) ->
 		{error, closed} ->
 			gen_tcp:shutdown(Socket, read_write);
 		{error, Reason} ->
-			io:fwrite("an error occurred~s~n", [Reason])
+			io:fwrite("an error occurred~s~n", [Reason]),
+			gen_tcp:shutdown(Socket, read_write)
 	end.
 
+% Decodifica lo recibido hasta que no haya nada interesante
 decode(Socket, Rec, Counter) ->
 	case firstOccurrence(Rec) of
 		{nuevo, N} -> 
