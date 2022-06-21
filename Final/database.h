@@ -1,3 +1,9 @@
+#include <assert.h>
+#include <stdlib.h>
+#include <stdio.h>
+
+#define LOAD_FACTOR 0.75
+
 /*
  * Un bucket contiene toda la información relevante
  * a los valores almacenados en la base de datos,
@@ -17,8 +23,8 @@ typedef struct bucket_t {
 	 * seguido de la cantidad de bytes
 	 * que este valor ocupa en memoria.
 	 */
-	void* value;
-	uint64_t bytes;
+	blob_t key;
+	blob_t value;
 
 	/*
 	 * TODO: explicar
@@ -33,7 +39,7 @@ typedef struct bucket_t {
 	 * Siguiente valor en la lista enlazada de datos
 	 * que han colisionado por ser mapeados a la misma
 	 * celda de la tabla hash.
-	 * 
+	 *
 	 * TODO: es una doble
 	 */
 	struct bucket_t* next_value;
@@ -61,35 +67,10 @@ typedef struct bucket_t {
  * de datos. Si la celda está vacía
  * contendrá puntero a NULL.
  */
-typedef bucket_t* cell_t;
-
-/*
- * Estadísticas sobre los accesos a la base
- * de datos, específicamente las cantidades de:
- * - inserciones
- * - borrados
- * - lecturas
- * - pares clave-valor
- * - bytes utilizados por los valores almacenados
- */
-typedef struct record_t {
-	uint64_t puts;
-	uint64_t dels;
-	uint64_t gets;
-	uint64_t keys;
-	uint64_t bytes;
-} record_t;
-
-/*
- * TODO: implementar counter64_t contador con mutex
- */
-typedef struct concurrent_record_t {
-	counter64_t puts;
-	counter64_t dels;
-	counter64_t gets;
-	counter64_t keys;
-	counter64_t bytes;
-} concurrent_record_t;
+typedef struct {
+	bucket_t *bucket;
+	pthread_mutex_t lock;
+} cell_t;
 
 /*
  * Un array de celdas es una tabla hash,
@@ -102,9 +83,92 @@ typedef struct concurrent_record_t {
  * Como parte de la base de datos guardamos
  * los metadatos de sus operaciones y memoria usada.
  */
-typedef struct database_t {
+typedef struct {
+	size_t size;
+	size_t capacity;
 	cell_t* hash_table;
+
 	bucket_t* least_recently_used;
-	// last_recently_used_cell_index ?
+
 	concurrent_record_t record;
+
 } database_t;
+
+#define INITIAL_CAPACITY 37
+
+static cell_t* create_hash_table() {
+	return malloc(sizeof(cell_t) * CAPACITY);
+}
+
+database_t db_create() {
+	database_t* db = malloc(sizeof(database_t));
+	db->hash_table = create_hash_table();
+	db->size = 0;
+	db->capacity = INITIAL_CAPACITY;
+	db->least_recently_used = NULL;
+
+	for (size_t i = 0; i < db->capacity; ++i)
+		// TODO
+		cell_init(&db->hash_table[i]);
+
+	return db;
+}
+
+void hash_table_destroy(database_t* db) {
+	for (size_t i = 0; i < db->capacity; ++i)
+		// TODO
+		cell_destroy(&db->hash_table[i]);
+
+	free(db->hash_table);
+}
+
+void cell_insert(cell_t* cell, blob_t* key, blob_t* value) {
+	// TODO
+}
+
+void hash_table_insert(database_t* db, blob_t* key, blob_t* value) {
+	uint64_t cell_index = horner(key) % db->capacity;
+
+	cell_insert(&db->hash_table[cell_index], key, value);
+
+	db->size++;
+
+	if (db->size / (double) db->capacity > LOAD_FACTOR)
+		hash_table_expand(db);
+}
+
+blob_t* hash_table_lookup(database_t* db, blob_t* key) {
+	uint64_t cell_index = horner(key) % db->capacity;
+
+	// TODO
+	return cell_find(&db->hash_table[cell_index], key);
+}
+
+void hash_table_delete(database_t* db, blob_t* key) {
+	uint64_t cell_index = horner(key) % db->capacity;
+
+	db->size--;
+
+	// TODO
+	cell_delete(&db->hash_table[cell_index], key);
+}
+
+void hash_table_expand(database_t* db) {
+	// TODO: recuperar los buckets
+	bucket_t* buckets = collect_buckets(db->hash_table);
+	uint64_t bucket_amount = db->size;
+
+	db->size = 0;
+	db->capacity *= 2;
+
+	db->hash_table = realloc(db->hash_table, sizeof(cell_t) * db->capacity);
+	for (size_t i = 0; i < db->capacity; ++i)
+		// TODO
+		cell_init(&db->hash_table[i]);
+
+	// TODO: reinsertar los buckets
+	for (size_t i = 0; i < bucket_amount; i++)
+		hash_table_reinsert(db, buckets[i]);
+
+	free(buckets);
+}
