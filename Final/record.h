@@ -1,3 +1,9 @@
+#pragma once
+
+#include <stdint.h>
+
+#include "counter64.h"
+
 /*
  * Estadísticas sobre los accesos a la base
  * de datos, específicamente las cantidades de:
@@ -23,18 +29,16 @@ typedef struct concurrent_record_t {
 	counter64_t bytes;
 } concurrent_record_t;
 
-concurrent_record_t record_init() {
-	concurrent_record_t crecord;
+concurrent_record_t record_init(concurrent_record_t* crecord) {
 	counter_init(&crecord->puts, 0);
 	counter_init(&crecord->dels, 0);
 	counter_init(&crecord->gets, 0);
 	counter_init(&crecord->keys, 0);
 	counter_init(&crecord->bytes, 0);
-	return crecord;
 }
 
 record_t report(concurrent_record_t* crecord) {
-	return {
+	return (record_t){
 		.puts  = counter_get(&crecord->puts),
 		.dels  = counter_get(&crecord->dels),
 		.gets  = counter_get(&crecord->gets),

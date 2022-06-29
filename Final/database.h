@@ -2,6 +2,9 @@
 #include <stdlib.h>
 #include <stdio.h>
 
+#include "blob.h"
+#include "record.h"
+
 #define LOAD_FACTOR 0.75
 
 /*
@@ -96,13 +99,12 @@ typedef struct {
 
 #define INITIAL_CAPACITY 37
 
-static cell_t* create_hash_table() {
-	return malloc(sizeof(cell_t) * CAPACITY);
+static cell_t* hash_table_create() {
+	return malloc(sizeof(cell_t) * INITIAL_CAPACITY);
 }
 
-database_t db_create() {
-	database_t* db = malloc(sizeof(database_t));
-	db->hash_table = create_hash_table();
+void db_init(database_t* db) {
+	db->hash_table = hash_table_create();
 	db->size = 0;
 	db->capacity = INITIAL_CAPACITY;
 	db->least_recently_used = NULL;
@@ -110,8 +112,6 @@ database_t db_create() {
 	for (size_t i = 0; i < db->capacity; ++i)
 		// TODO
 		cell_init(&db->hash_table[i]);
-
-	return db;
 }
 
 void hash_table_destroy(database_t* db) {
