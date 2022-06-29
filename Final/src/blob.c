@@ -1,14 +1,9 @@
-#pragma once
+#include "blob.h"
 
-#include <stdint.h>
 #include <stddef.h>
+#include <stdlib.h>
 
 #define BLOB_HASH_PRIME 31
-
-typedef struct blob_t {
-	void* memory;
-	uint64_t bytes;
-} blob_t;
 
 int blob_equals(blob_t* a, blob_t* b) {
 	if (a->bytes != b->bytes)

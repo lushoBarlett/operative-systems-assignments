@@ -1,7 +1,5 @@
-shell
-smokers_same_agent
-philosophers_semaphores
-philosophers_leftist
-io
-server
+**/build
+**/bin
 *.swp
+*.sh
+.vscode
