@@ -9,10 +9,12 @@ FLAGS := -Wall -Wextra -Werror -std=c17
 
 
 CORE := \
-	blob
+	blob \
+	counter64
 
 TEST := \
-	blob
+	blob \
+	counter64
 
 OBJECTS := $(CORE:%=$(BUILD)/%.o)
 
