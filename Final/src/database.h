@@ -82,6 +82,15 @@ typedef struct {
 } hash_table_t;
 
 /*
+ * TODO: LRU
+ */
+typedef struct {
+	bucket_t* back;
+	bucket_t* front;
+	pthread_mutex_t lock;
+} lru_queue_t;
+
+/*
  * TODO: justificar LRU
  *
  * Como parte de la base de datos guardamos
@@ -89,6 +98,6 @@ typedef struct {
  */
 typedef struct {
 	hash_table_t hash_table;
-	bucket_t* least_recently_used;
+	lru_queue_t lru_queue;
 	concurrent_record_t record;
 } database_t;
