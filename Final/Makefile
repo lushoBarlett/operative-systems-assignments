@@ -10,11 +10,14 @@ FLAGS := -Wall -Wextra -Werror -std=c17
 
 CORE := \
 	blob \
-	counter64
+	counter64 \
+	record \
+	lru_queue
 
 TEST := \
 	blob \
-	counter64
+	counter64 \
+	lru_queue
 
 OBJECTS := $(CORE:%=$(BUILD)/%.o)
 

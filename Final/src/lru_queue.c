@@ -6,7 +6,9 @@ void lru_queue_init(lru_queue_t* lru_queue) {
 }
 
 static void enqueue_operation(lru_queue_t* lru_queue, bucket_t* bucket) {
-	if (lru_queue->back)
+	if (lru_queue->front == NULL)
+		lru_queue->front = bucket;
+	else
 		lru_queue->back->next_queue = bucket;
 
 	bucket->prev_queue = lru_queue->back;
@@ -22,21 +24,6 @@ void lru_queue_enqueue(lru_queue_t* lru_queue, bucket_t* bucket) {
 	pthread_mutex_unlock(&lru_queue->lock);
 }
 
-bucket_t* lru_queue_dequeue(lru_queue_t* lru_queue) {
-	pthread_mutex_lock(&lru_queue->lock);
-
-	bucket_t* bucket = lru_queue->front;
-
-	if (lru_queue->front)
-		lru_queue->front = lru_queue->front->next_queue;
-
-	pthread_mutex_unlock(&lru_queue->lock);
-
-	bucket->next_queue = NULL;
-
-	return bucket;
-}
-
 static void delete_operation(lru_queue_t* lru_queue, bucket_t* bucket) {
 	bucket_t* next = bucket->next_queue;
 	bucket_t* prev = bucket->prev_queue;
@@ -47,7 +34,26 @@ static void delete_operation(lru_queue_t* lru_queue, bucket_t* bucket) {
 	if (prev)
 		prev->next_queue = next;
 
-	bucket->next_queue = NULL;
+	bucket->next_queue = bucket->prev_queue = NULL;
+
+	if (lru_queue->front == bucket)
+		lru_queue->front = next;
+
+	if (lru_queue->back == bucket)
+		lru_queue->back = prev;
+}
+
+bucket_t* lru_queue_dequeue(lru_queue_t* lru_queue) {
+	pthread_mutex_lock(&lru_queue->lock);
+
+	bucket_t* bucket = lru_queue->front;
+
+	if (bucket)
+		delete_operation(lru_queue, bucket);
+
+	pthread_mutex_unlock(&lru_queue->lock);
+
+	return bucket;
 }
 
 void lru_queue_delete(lru_queue_t* lru_queue, bucket_t* bucket) {

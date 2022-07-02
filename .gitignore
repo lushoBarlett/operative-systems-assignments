@@ -3,3 +3,4 @@
 *.swp
 *.sh
 .vscode
+vgcore.*

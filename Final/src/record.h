@@ -29,20 +29,6 @@ typedef struct concurrent_record_t {
 	counter64_t bytes;
 } concurrent_record_t;
 
-concurrent_record_t record_init(concurrent_record_t* crecord) {
-	counter_init(&crecord->puts, 0);
-	counter_init(&crecord->dels, 0);
-	counter_init(&crecord->gets, 0);
-	counter_init(&crecord->keys, 0);
-	counter_init(&crecord->bytes, 0);
-}
+void record_init(concurrent_record_t* concurrent_record);
 
-record_t report(concurrent_record_t* crecord) {
-	return (record_t){
-		.puts  = counter_get(&crecord->puts),
-		.dels  = counter_get(&crecord->dels),
-		.gets  = counter_get(&crecord->gets),
-		.keys  = counter_get(&crecord->keys),
-		.bytes = counter_get(&crecord->bytes)
-	};
-}
+record_t report(concurrent_record_t* concurrent_record);
