@@ -1,7 +1,18 @@
+#pragma once
+
 #include "cell.h"
 
-#define LOAD_FACTOR 0.75
-#define INITIAL_CAPACITY 37
+/*
+ * Un array de celdas es una tabla hash,
+ * que en nuestro caso es el banco de datos en sí.
+ * Se va redimensionando de acuerdo a
+ * nuestras necesidades de almacenamiento.
+ */
+typedef struct {
+	size_t size;
+	size_t capacity;
+	cell_t* cells;
+} hash_table_t;
 
 void hash_table_init(hash_table_t* hash_table);
 
