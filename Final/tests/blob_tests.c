@@ -5,22 +5,11 @@
 #include <stdlib.h>
 
 #include "../src/blob.h"
-
-static blob_t from_string(const char* string) {
-	size_t bytes = strlen(string) + 1;
-
-	void* memory = malloc(sizeof(char) * bytes);
-	strcpy(memory, string);
-
-	return (blob_t){
-		.memory = memory,
-		.bytes = bytes,
-	};
-}
+#include "test_utils.h"
 
 static int equals_from_strings(const char* first, const char* second) {
-	blob_t blob_first = from_string(first);
-	blob_t blob_second = from_string(second);
+	blob_t blob_first = blob_from_string(first);
+	blob_t blob_second = blob_from_string(second);
 
 	int result = blob_equals(&blob_first, &blob_second);
 
@@ -31,7 +20,7 @@ static int equals_from_strings(const char* first, const char* second) {
 }
 
 static size_t hash_from_string(const char* string) {
-	blob_t blob = from_string(string);
+	blob_t blob = blob_from_string(string);
 
 	size_t hash = blob_hash(&blob);
 

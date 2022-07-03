@@ -12,12 +12,15 @@ CORE := \
 	blob \
 	counter64 \
 	record \
-	lru_queue
+	lru_queue \
+	bucket \
+	cell
 
 TEST := \
 	blob \
 	counter64 \
-	lru_queue
+	lru_queue \
+	cell
 
 OBJECTS := $(CORE:%=$(BUILD)/%.o)
 
@@ -60,10 +63,16 @@ $(BUILD)/main.o: $(SRC)/main.c $(OBJECTS)
 .PHONY: tests
 tests: dirs $(BIN)/tests
 
-$(BIN)/tests: $(BUILD)/tests.o $(TEST_OBJECTS) $(OBJECTS)
+$(BIN)/tests: $(BUILD)/tests.o $(TEST_OBJECTS) $(OBJECTS) $(BUILD)/test_utils.o
 	$(CC) $(FLAGS) -o $@ $^
 
 $(BUILD)/tests.o: $(TESTS)/main.c
+	$(CC) -c $(FLAGS) -o $@ $<
+
+
+
+
+$(BUILD)/test_utils.o: $(TESTS)/test_utils.c $(TESTS)/test_utils.h
 	$(CC) -c $(FLAGS) -o $@ $<
 
 

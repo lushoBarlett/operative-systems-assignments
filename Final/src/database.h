@@ -1,3 +1,5 @@
+#pragma once
+
 #include "blob.h"
 #include "record.h"
 

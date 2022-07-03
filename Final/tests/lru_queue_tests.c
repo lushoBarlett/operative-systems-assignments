@@ -4,17 +4,14 @@
 #include <assert.h>
 
 #include "../src/lru_queue.h"
+#include "test_utils.h"
 
 static lru_queue_t init() {
 	lru_queue_t lru_queue;
-	lru_queue_init(&lru_queue);
-	return lru_queue;
-}
 
-static bucket_t* new_bucket() {
-	bucket_t* bucket = malloc(sizeof(bucket_t));
-	bucket->next_queue = bucket->prev_queue = NULL;
-	return bucket;
+	lru_queue_init(&lru_queue);
+
+	return lru_queue;
 }
 
 static void empty_dequeue_is_null() {
