@@ -7,17 +7,6 @@ void cell_init(cell_t* cell) {
 	pthread_mutex_init(&cell->lock, NULL);
 }
 
-void cell_free(cell_t* cell) {
-	for (bucket_t* bucket = cell->bucket; bucket; ) {
-		bucket_t* next = bucket->next_value;
-
-		bucket_free(bucket);
-		free(bucket);
-
-		bucket = next;
-	}
-}
-
 void cell_insert(cell_t* cell, bucket_t* bucket) {
 	if (cell->bucket)
 		cell->bucket->prev_value = bucket;
@@ -59,4 +48,15 @@ void cell_delete(cell_t* cell, const blob_t* key) {
 
 	bucket_free(bucket);
 	free(bucket);
+}
+
+void cell_free(cell_t* cell) {
+	for (bucket_t* bucket = cell->bucket; bucket; ) {
+		bucket_t* next = bucket->next_value;
+
+		bucket_free(bucket);
+		free(bucket);
+
+		bucket = next;
+	}
 }
