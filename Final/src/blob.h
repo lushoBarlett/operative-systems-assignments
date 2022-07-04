@@ -2,13 +2,15 @@
 
 #include <stddef.h>
 
-typedef struct blob_t {
+typedef struct {
 	void* memory;
 	size_t bytes;
 } blob_t;
 
-int blob_equals(const blob_t* a, const blob_t* b);
+blob_t blob_empty();
 
-size_t blob_hash(const blob_t* blob);
+int blob_equals(blob_t a, blob_t b);
 
-void blob_free(blob_t* blob);
+size_t blob_hash(blob_t blob);
+
+void blob_free(blob_t blob);

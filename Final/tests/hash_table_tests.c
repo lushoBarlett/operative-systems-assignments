@@ -16,9 +16,9 @@ static hash_table_t init() {
 static void empty_cell_is_null() {
 	hash_table_t hash_table = init();
 
-	blob_t key = { NULL, 0 };
+	blob_t key = blob_empty();
 
-	assert(hash_table_lookup(&hash_table, &key) == NULL);
+	assert(blob_equals(hash_table_lookup(&hash_table, key), blob_empty()));
 
 	hash_table_free(&hash_table);
 }
@@ -29,11 +29,11 @@ static void find_returns_inserted_value() {
 	blob_t key = blob_from_string("key");
 	blob_t value = blob_from_string("value");
 
-	hash_table_insert(&hash_table, &key, &value);
+	hash_table_insert(&hash_table, key, value);
 
-	const blob_t* found = hash_table_lookup(&hash_table, &key);
+	blob_t found = hash_table_lookup(&hash_table, key);
 
-	assert(blob_equals(found, &value));
+	assert(blob_equals(found, value));
 
 	hash_table_free(&hash_table);
 }
@@ -44,19 +44,19 @@ static void delete_removes_value() {
 	blob_t key = blob_from_string("key");
 	blob_t value = blob_from_string("value");
 
-	hash_table_insert(&hash_table, &key, &value);
+	hash_table_insert(&hash_table, key, value);
 
 	key = blob_from_string("key");
 
-	hash_table_delete(&hash_table, &key);
+	hash_table_delete(&hash_table, key);
 
-	const blob_t* found = hash_table_lookup(&hash_table, &key);
+	blob_t found = hash_table_lookup(&hash_table, key);
 
-	assert(found == NULL);
+	assert(blob_equals(found, blob_empty()));
 
 	hash_table_free(&hash_table);
 
-	blob_free(&key);
+	blob_free(key);
 }
 
 static void find_among_many() {
@@ -70,13 +70,13 @@ static void find_among_many() {
 	blob_t value2 = blob_from_string("value2");
 	blob_t value3 = blob_from_string("value3");
 
-	hash_table_insert(&hash_table, &key1, &value1);
-	hash_table_insert(&hash_table, &key2, &value2);
-	hash_table_insert(&hash_table, &key3, &value3);
+	hash_table_insert(&hash_table, key1, value1);
+	hash_table_insert(&hash_table, key2, value2);
+	hash_table_insert(&hash_table, key3, value3);
 
-	assert(blob_equals(&value1, hash_table_lookup(&hash_table, &key1)));
-	assert(blob_equals(&value2, hash_table_lookup(&hash_table, &key2)));
-	assert(blob_equals(&value3, hash_table_lookup(&hash_table, &key3)));
+	assert(blob_equals(value1, hash_table_lookup(&hash_table, key1)));
+	assert(blob_equals(value2, hash_table_lookup(&hash_table, key2)));
+	assert(blob_equals(value3, hash_table_lookup(&hash_table, key3)));
 
 	hash_table_free(&hash_table);
 }
@@ -95,16 +95,16 @@ static void intensive_work() {
 		keys[i] = blob_from_string(string);
 		values[i] = blob_from_string(string);
 
-		hash_table_insert(&hash_table, &keys[i], &values[i]);
+		hash_table_insert(&hash_table, keys[i], values[i]);
 	}
 
 	assert(hash_table.size == 256);
 
 	for (size_t i = 0; i < 256; i++)
-		assert(blob_equals(&values[i], hash_table_lookup(&hash_table, &keys[i])));
+		assert(blob_equals(values[i], hash_table_lookup(&hash_table, keys[i])));
 
 	for (size_t i = 0; i < 256; i++)
-		hash_table_delete(&hash_table, &keys[i]);
+		hash_table_delete(&hash_table, keys[i]);
 
 	assert(hash_table.size == 0);
 

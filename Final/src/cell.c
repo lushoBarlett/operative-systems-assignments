@@ -16,19 +16,19 @@ void cell_insert(cell_t* cell, bucket_t* bucket) {
 	cell->bucket = bucket;
 }
 
-static bucket_t* fetch_bucket(cell_t* cell, const blob_t* key) {
+static bucket_t* fetch_bucket(cell_t* cell, blob_t key) {
 	for (bucket_t* bucket = cell->bucket; bucket; bucket = bucket->next_value)
-		if (blob_equals(key, &bucket->key))
+		if (blob_equals(key, bucket->key))
 			return bucket;
 
 	return NULL;
 }
 
-const bucket_t* cell_find(cell_t* cell, const blob_t* key) {
+const bucket_t* cell_find(cell_t* cell, blob_t key) {
 	return fetch_bucket(cell, key);
 }
 
-void cell_delete(cell_t* cell, const blob_t* key) {
+void cell_delete(cell_t* cell, blob_t key) {
 	bucket_t* bucket = fetch_bucket(cell, key);
 
 	if (!bucket)

@@ -30,7 +30,7 @@ static bucket_t** collect_buckets(hash_table_t* hash_table) {
 }
 
 static void hash_table_reinsert(hash_table_t* hash_table, bucket_t* bucket) {
-	size_t cell_index = blob_hash(&bucket->key) % hash_table->capacity;
+	size_t cell_index = blob_hash(bucket->key) % hash_table->capacity;
 
 	cell_insert(&hash_table->cells[cell_index], bucket);
 
@@ -53,7 +53,7 @@ static void hash_table_expand(hash_table_t* hash_table) {
 	free(buckets);
 }
 
-bucket_t* hash_table_insert(hash_table_t* hash_table, blob_t* key, blob_t* value) {
+bucket_t* hash_table_insert(hash_table_t* hash_table, blob_t key, blob_t value) {
 	size_t cell_index = blob_hash(key) % hash_table->capacity;
 
 	bucket_t* new_bucket = bucket_create(key, value);
@@ -70,18 +70,18 @@ bucket_t* hash_table_insert(hash_table_t* hash_table, blob_t* key, blob_t* value
 	return new_bucket;
 }
 
-const blob_t* hash_table_lookup(hash_table_t* hash_table, const blob_t* key) {
+blob_t hash_table_lookup(hash_table_t* hash_table, blob_t key) {
 	size_t cell_index = blob_hash(key) % hash_table->capacity;
 
 	const bucket_t* bucket = cell_find(&hash_table->cells[cell_index], key);
 
 	if (!bucket)
-		return NULL;
+		return blob_empty();
 
-	return &bucket->value;
+	return bucket->value;
 }
 
-void hash_table_delete(hash_table_t* hash_table, const blob_t* key) {
+void hash_table_delete(hash_table_t* hash_table, blob_t key) {
 	size_t cell_index = blob_hash(key) % hash_table->capacity;
 
 	// TODO: optimize

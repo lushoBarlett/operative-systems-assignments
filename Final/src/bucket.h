@@ -61,6 +61,6 @@ typedef struct bucket_t {
 	struct bucket_t* prev_queue;
 } bucket_t;
 
-bucket_t* bucket_create(blob_t* key, blob_t* value);
+bucket_t* bucket_create(blob_t key, blob_t value);
 
 void bucket_free(bucket_t* bucket);
