@@ -20,3 +20,23 @@ bucket_t* new_bucket() {
 	memset(bucket, 0, sizeof(bucket_t));
 	return bucket;
 }
+
+pthread_t* create_threads(size_t amount) {
+	return malloc(sizeof(pthread_t) * amount);
+}
+
+void spawn_thread(pthread_t* thread, void* procedure(void*), void* argument) {
+	pthread_create(thread, NULL, procedure, argument);
+}
+
+void spawn_threads(pthread_t* threads, size_t amount, void* procedure(void*), void* argument) {
+	for (size_t i = 0; i < amount; i++)
+		pthread_create(&threads[i], NULL, procedure, argument);
+}
+
+void join_threads(pthread_t* threads, size_t amount) {
+	for (size_t i = 0; i < amount; i++)
+		pthread_join(threads[i], NULL);
+
+	free(threads);
+}

@@ -3,6 +3,7 @@
 #include <assert.h>
 
 #include "../src/counter64.h"
+#include "test_utils.h"
 
 static counter64_t init(uint64_t value) {
 	counter64_t counter;
@@ -22,32 +23,24 @@ static void create() {
 
 #define REPETITIONS 10000
 
-static void* increment(void* arg) {
-	counter64_t* counter = arg;
-
+static void increment(counter64_t* counter) {
 	for (size_t i = 0; i < REPETITIONS; i++)
 		counter_increment(counter);
-
-	return NULL;
 }
 
-static void* add(void* arg) {
-	counter64_t* counter = arg;
-
+static void add(counter64_t* counter) {
 	for (size_t i = 0; i < REPETITIONS; i++)
 		counter_add(counter, 5);
-
-	return NULL;
 }
 
-static void* sub(void* arg) {
-	counter64_t* counter = arg;
-
+static void sub(counter64_t* counter) {
 	for (size_t i = 0; i < REPETITIONS; i++)
 		counter_add(counter, 2);
-
-	return NULL;
 }
+
+PTHREAD_API(increment, counter64_t*)
+PTHREAD_API(add, counter64_t*)
+PTHREAD_API(sub, counter64_t*)
 
 static void operate() {
 	counter64_t counter = init(50);
@@ -64,15 +57,15 @@ static void operate() {
 static void concurrent_operate() {
 	counter64_t counter = init(50);
 
-	pthread_t threads[3];
+	pthread_t* threads = create_threads(3);
 
-	pthread_create(&threads[0], NULL, increment, &counter);
-	pthread_create(&threads[1], NULL, add, &counter);
-	pthread_create(&threads[2], NULL, sub, &counter);
+	void* arg = &counter;
 
-	pthread_join(threads[0], NULL);
-	pthread_join(threads[1], NULL);
-	pthread_join(threads[2], NULL);
+	spawn_thread(&threads[0], PTHREAD_CALLER(increment), &arg);
+	spawn_thread(&threads[1], PTHREAD_CALLER(add), &arg);
+	spawn_thread(&threads[2], PTHREAD_CALLER(sub), &arg);
+
+	join_threads(threads, 3);
 
 	uint64_t value = counter_get(&counter);
 
