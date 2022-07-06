@@ -85,9 +85,27 @@ static void find_among_many() {
 	cell_free(&cell);
 }
 
+static void reinsert_same_key() {
+	cell_t cell = init();
+
+	for (size_t reps = 0; reps < 10000; reps++) {
+		blob_t key = blob_from_string("key");
+		blob_t value = blob_from_string("value");
+
+		bucket_t* bucket = bucket_create(key, value);
+		
+		cell_insert(&cell, bucket);
+		
+		assert(bucket == cell_find(&cell, key));
+	}
+
+	cell_free(&cell);
+}
+
 void cell_tests() {
 	empty_cell_is_null();
 	find_returns_inserted_bucket();
 	delete_removes_bucket();
 	find_among_many();
+	reinsert_same_key();
 }
