@@ -1,6 +1,7 @@
 #include "cell_tests.h"
 
 #include <assert.h>
+#include <stdio.h>
 
 #include "../src/cell.h"
 #include "test_utils.h"
@@ -102,10 +103,98 @@ static void reinsert_same_key() {
 	cell_free(&cell);
 }
 
+struct common_args {
+	cell_t* cell;
+	const char* key;
+	const char* value;
+	size_t repetitions;
+};
+
+static void common(struct common_args args) {
+	for (size_t i = 0; i < args.repetitions; i++) {
+		blob_t key = blob_from_string(args.key);
+
+		bucket_t* bucket = bucket_create(
+			blob_from_string(args.key), blob_from_string(args.value));
+
+		cell_insert(args.cell, bucket);
+
+		const bucket_t* found = cell_find(args.cell, key);
+		
+		assert(bucket == found);
+
+		cell_delete(args.cell, key);
+
+		assert(NULL == cell_find(args.cell, key));
+
+		blob_free(key);
+	}
+}
+
+PTHREAD_API(common, struct common_args)
+
+static void reinsertion(struct common_args args) {
+	for (size_t i = 0; i < args.repetitions; i++) {
+		blob_t key = blob_from_string(args.key);
+
+		bucket_t* bucket = bucket_create(
+			blob_from_string(args.key), blob_from_string(args.value));
+
+		cell_insert(args.cell, bucket);
+
+		const bucket_t* found = cell_find(args.cell, key);
+
+		assert(found);
+		int result = blob_equals(key, found->key);
+		result = blob_equals(key, found->key);
+		assert(result);
+		blob_free(key);
+	}
+}
+
+PTHREAD_API(reinsertion, struct common_args)
+
+static void concurrent_reinsertion() {
+	cell_t cell = init();
+
+	pthread_t* threads = create_threads(2);
+
+	struct common_args args1 = (struct common_args){ &cell, "key", "value1", 100000 };
+	spawn_thread(&threads[0], PTHREAD_CALLER(reinsertion), &args1);
+
+	struct common_args args2 = (struct common_args){ &cell, "key", "value2", 100000 };
+	spawn_thread(&threads[1], PTHREAD_CALLER(reinsertion), &args2);
+
+	join_threads(threads, 2);
+
+	cell_free(&cell);
+}
+
+static void concurrency_test() {
+	cell_t cell = init();
+
+	pthread_t* threads = create_threads(3);
+
+	struct common_args args1 = (struct common_args){ &cell, "key1", "value1", 100000 };
+	spawn_thread(&threads[0], PTHREAD_CALLER(common), &args1);
+
+	struct common_args args2 = (struct common_args){ &cell, "key2", "value2", 100000 };
+	spawn_thread(&threads[1], PTHREAD_CALLER(common), &args2);
+
+	struct common_args args3 = (struct common_args){ &cell, "key3", "value3", 100000 };
+	spawn_thread(&threads[2], PTHREAD_CALLER(common), &args3);
+
+	join_threads(threads, 3);
+
+	cell_free(&cell);
+}
+
 void cell_tests() {
 	empty_cell_is_null();
 	find_returns_inserted_bucket();
 	delete_removes_bucket();
 	find_among_many();
 	reinsert_same_key();
+	concurrency_test();
+	concurrent_reinsertion();
 }

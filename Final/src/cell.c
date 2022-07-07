@@ -32,8 +32,17 @@ static void delete_bucket(cell_t* cell, bucket_t* bucket) {
 	free(bucket);
 }
 
+static void fetch_and_delete(cell_t* cell, blob_t key) {
+	bucket_t* bucket = fetch_bucket(cell, key);
+
+	if (bucket)
+		delete_bucket(cell, bucket);
+}
+
 void cell_insert(cell_t* cell, bucket_t* bucket) {
-	cell_delete(cell, bucket->key);
+	pthread_mutex_lock(&cell->lock);
+
+	fetch_and_delete(cell, bucket->key);
 
 	if (cell->bucket)
 		cell->bucket->prev_value = bucket;
@@ -41,17 +50,26 @@ void cell_insert(cell_t* cell, bucket_t* bucket) {
 	bucket->next_value = cell->bucket;
 
 	cell->bucket = bucket;
+
+	pthread_mutex_unlock(&cell->lock);
 }
 
 const bucket_t* cell_find(cell_t* cell, blob_t key) {
-	return fetch_bucket(cell, key);
+	pthread_mutex_lock(&cell->lock);
+
+	const bucket_t* bucket = fetch_bucket(cell, key);
+
+	pthread_mutex_unlock(&cell->lock);
+
+	return bucket;
 }
 
 void cell_delete(cell_t* cell, blob_t key) {
-	bucket_t* bucket = fetch_bucket(cell, key);
+	pthread_mutex_lock(&cell->lock);
 
-	if (bucket)
-		delete_bucket(cell, bucket);
+	fetch_and_delete(cell, key);
+
+	pthread_mutex_unlock(&cell->lock);
 }
 
 void cell_free(cell_t* cell) {

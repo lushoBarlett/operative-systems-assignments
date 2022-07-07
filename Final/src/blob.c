@@ -1,6 +1,7 @@
 #include "blob.h"
 
 #include <stdlib.h>
+#include <string.h>
 
 #define BLOB_HASH_PRIME 31
 
@@ -12,14 +13,7 @@ int blob_equals(blob_t a, blob_t b) {
 	if (a.bytes != b.bytes)
 		return 0;
 
-	const char* pa = a.memory;
-	const char* pb = b.memory;
-	size_t byte = 0;
-
-	while(byte < a.bytes && *pa++ == *pb++)
-		byte++;
-
-	return byte == a.bytes;
+	return memcmp(a.memory, b.memory, a.bytes) == 0;
 }
 
 size_t blob_hash(blob_t blob) {

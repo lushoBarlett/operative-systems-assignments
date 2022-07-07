@@ -12,7 +12,7 @@ database_t db_create() {
 	return database;
 }
 
-void db_put(database_t* database, blob_t* key, blob_t* value) {
+void db_put(database_t* database, blob_t key, blob_t value) {
 	bucket_t* bucket = hash_table_insert(&database->hash_table, key, value);
 
 	lru_queue_enqueue(&database->lru_queue, bucket);
@@ -22,7 +22,7 @@ void db_put(database_t* database, blob_t* key, blob_t* value) {
 
 // TODO: return blob pointers?
 
-const bucket_t* db_get(database_t* database, blob_t* key) {
+const bucket_t* db_get(database_t* database, blob_t key) {
 	bucket_t* bucket = hash_table_lookup(&database->hash_table, key);
 
 	if (bucket)
@@ -33,7 +33,7 @@ const bucket_t* db_get(database_t* database, blob_t* key) {
 	return bucket;
 }
 
-bucket_t* db_take(database_t* database, blob_t* key) {
+bucket_t* db_take(database_t* database, blob_t key) {
 	bucket_t* bucket = hash_table_lookup(&database->hash_table, key);
 
 	if (bucket) {
@@ -46,7 +46,7 @@ bucket_t* db_take(database_t* database, blob_t* key) {
 	return bucket;
 }
 
-void db_delete(database_t* database, blob_t* key) {
+void db_delete(database_t* database, blob_t key) {
 	bucket_t* bucket = db_take(database, key);
 
 	if (bucket)
@@ -57,6 +57,18 @@ void db_delete(database_t* database, blob_t* key) {
 
 record_t db_stats(database_t* database) {
 	return report(&database->record);
+}
+
+void* db_memsafe_malloc(database_t* database, size_t bytes) {
+	void* mallocd = malloc(bytes);
+	
+	while (mallocd == NULL) {
+		bucket_t* bucket = lru_queue_dequeue(&database->lru_queue);
+		hash_table_delete(&database->hash_table, bucket->key);
+		bucket_free(bucket);
+	}
+
+	return mallocd;
 }
 
 void db_destroy(database_t* database) {
