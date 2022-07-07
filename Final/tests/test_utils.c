@@ -17,7 +17,18 @@ blob_t blob_from_string(const char* string) {
 
 bucket_t* new_bucket() {
 	bucket_t* bucket = malloc(sizeof(bucket_t));
+
 	memset(bucket, 0, sizeof(bucket_t));
+
+	return bucket;
+}
+
+bucket_t* bucket_from_strings(const char* key, const char* value) {
+	bucket_t* bucket = new_bucket();
+
+	bucket->key = blob_from_string(key);
+	bucket->value = blob_from_string(value);
+
 	return bucket;
 }
 

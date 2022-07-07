@@ -3,9 +3,20 @@
 #include "../src/blob.h"
 #include "../src/database.h"
 
+#include <stdio.h>
+
+#define TEST_SUITE(NAME) \
+printf("=== Tests for module: " #NAME " ===\n")
+
+#define TEST(EXPRESSION) \
+printf("|- Testing > " #EXPRESSION "\n"); \
+EXPRESSION
+
 blob_t blob_from_string(const char* string);
 
 bucket_t* new_bucket();
+
+bucket_t* bucket_from_strings(const char* key, const char* value);
 
 #define PTHREAD_CALLER(FUNCTION) \
 __pthread_api_##FUNCTION

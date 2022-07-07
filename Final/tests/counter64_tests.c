@@ -73,7 +73,9 @@ static void concurrent_operate() {
 }
 
 void counter64_tests() {
-	create();
-	operate();
-	concurrent_operate();
+	TEST_SUITE(counter64);
+
+	TEST(create());
+	TEST(operate());
+	TEST(concurrent_operate());
 }

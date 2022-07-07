@@ -1,7 +1,6 @@
 #include "cell_tests.h"
 
 #include <assert.h>
-#include <stdio.h>
 
 #include "../src/cell.h"
 #include "test_utils.h"
@@ -12,6 +11,24 @@ static cell_t init() {
 	cell_init(&cell);
 
 	return cell;
+}
+
+static const bucket_t* find_from_string(cell_t* cell, const char* key) {
+	blob_t bkey = blob_from_string(key);
+
+	const bucket_t* found = cell_find(cell, bkey);
+
+	blob_free(bkey);
+
+	return found;
+}
+
+static void delete_from_string(cell_t* cell, const char* key) {
+	blob_t bkey = blob_from_string(key);
+
+	cell_delete(cell, bkey);
+
+	blob_free(bkey);
 }
 
 static void empty_cell_is_null() {
@@ -27,14 +44,11 @@ static void empty_cell_is_null() {
 static void find_returns_inserted_bucket() {
 	cell_t cell = init();
 
-	blob_t key = blob_from_string("key");
-	blob_t value = blob_from_string("value");
-
-	bucket_t* bucket = bucket_create(key, value);
+	bucket_t* bucket = bucket_from_strings("key", "value");
 
 	cell_insert(&cell, bucket);
 
-	const bucket_t* found = cell_find(&cell, key);
+	const bucket_t* found = find_from_string(&cell, "key");
 
 	assert(found == bucket);
 
@@ -44,16 +58,13 @@ static void find_returns_inserted_bucket() {
 static void delete_removes_bucket() {
 	cell_t cell = init();
 
-	blob_t key = blob_from_string("key");
-	blob_t value = blob_from_string("value");
-
-	bucket_t* bucket = bucket_create(key, value);
+	bucket_t* bucket = bucket_from_strings("key", "value");
 
 	cell_insert(&cell, bucket);
 
-	cell_delete(&cell, key);
+	delete_from_string(&cell, "key");
 
-	const bucket_t* found = cell_find(&cell, key);
+	const bucket_t* found = find_from_string(&cell, "key");
 
 	assert(found == NULL);
 
@@ -63,25 +74,17 @@ static void delete_removes_bucket() {
 static void find_among_many() {
 	cell_t cell = init();
 
-	blob_t key1 = blob_from_string("key1");
-	blob_t key2 = blob_from_string("key2");
-	blob_t key3 = blob_from_string("key3");
-
-	blob_t value1 = blob_from_string("value1");
-	blob_t value2 = blob_from_string("value2");
-	blob_t value3 = blob_from_string("value3");
-
-	bucket_t* bucket1 = bucket_create(key1, value1);
-	bucket_t* bucket2 = bucket_create(key2, value2);
-	bucket_t* bucket3 = bucket_create(key3, value3);
+	bucket_t* bucket1 = bucket_from_strings("key1", "value1");
+	bucket_t* bucket2 = bucket_from_strings("key2", "value2");
+	bucket_t* bucket3 = bucket_from_strings("key3", "value3");
 
 	cell_insert(&cell, bucket1);
 	cell_insert(&cell, bucket2);
 	cell_insert(&cell, bucket3);
 
-	assert(bucket1 == cell_find(&cell, key1));
-	assert(bucket2 == cell_find(&cell, key2));
-	assert(bucket3 == cell_find(&cell, key3));
+	assert(bucket1 == find_from_string(&cell, "key1"));
+	assert(bucket2 == find_from_string(&cell, "key2"));
+	assert(bucket3 == find_from_string(&cell, "key3"));
 
 	cell_free(&cell);
 }
@@ -90,14 +93,11 @@ static void reinsert_same_key() {
 	cell_t cell = init();
 
 	for (size_t reps = 0; reps < 10000; reps++) {
-		blob_t key = blob_from_string("key");
-		blob_t value = blob_from_string("value");
-
-		bucket_t* bucket = bucket_create(key, value);
+		bucket_t* bucket = bucket_from_strings("key", "value");
 		
 		cell_insert(&cell, bucket);
 		
-		assert(bucket == cell_find(&cell, key));
+		assert(bucket == find_from_string(&cell, "key"));
 	}
 
 	cell_free(&cell);
@@ -112,44 +112,38 @@ struct common_args {
 
 static void common(struct common_args args) {
 	for (size_t i = 0; i < args.repetitions; i++) {
-		blob_t key = blob_from_string(args.key);
-
-		bucket_t* bucket = bucket_create(
-			blob_from_string(args.key), blob_from_string(args.value));
+		bucket_t* bucket = bucket_from_strings(args.key, args.value);
 
 		cell_insert(args.cell, bucket);
 
-		const bucket_t* found = cell_find(args.cell, key);
+		const bucket_t* found = find_from_string(args.cell, args.key);
 		
 		assert(bucket == found);
 
-		cell_delete(args.cell, key);
+		delete_from_string(args.cell, args.key);
 
-		assert(NULL == cell_find(args.cell, key));
-
-		blob_free(key);
+		assert(NULL == find_from_string(args.cell, args.key));
 	}
 }
 
 PTHREAD_API(common, struct common_args)
 
 static void reinsertion(struct common_args args) {
-	for (size_t i = 0; i < args.repetitions; i++) {
-		blob_t key = blob_from_string(args.key);
+	blob_t key = blob_from_string(args.key);
 
-		bucket_t* bucket = bucket_create(
-			blob_from_string(args.key), blob_from_string(args.value));
+	for (size_t i = 0; i < args.repetitions; i++) {
+		bucket_t* bucket = bucket_from_strings(args.key, args.value);
 
 		cell_insert(args.cell, bucket);
 
-		const bucket_t* found = cell_find(args.cell, key);
+		const bucket_t* found = find_from_string(args.cell, args.key);
 
 		assert(found);
-		int result = blob_equals(key, found->key);
-		result = blob_equals(key, found->key);
-		assert(result);
-		blob_free(key);
+
+		assert(blob_equals(key, found->key));
 	}
+
+	blob_free(key);
 }
 
 PTHREAD_API(reinsertion, struct common_args)
@@ -190,11 +184,13 @@ static void concurrency_test() {
 }
 
 void cell_tests() {
-	empty_cell_is_null();
-	find_returns_inserted_bucket();
-	delete_removes_bucket();
-	find_among_many();
-	reinsert_same_key();
-	concurrency_test();
-	concurrent_reinsertion();
+	TEST_SUITE(cell);
+
+	TEST(empty_cell_is_null());
+	TEST(find_returns_inserted_bucket());
+	TEST(delete_removes_bucket());
+	TEST(find_among_many());
+	TEST(reinsert_same_key());
+	TEST(concurrency_test());
+	TEST(concurrent_reinsertion());
 }

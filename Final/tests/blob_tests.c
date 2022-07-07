@@ -56,7 +56,9 @@ static void hash() {
 }
 
 void blob_tests() {
-	empty_equals();
-	general_equals();
-	hash();
+	TEST_SUITE(blob);
+
+	TEST(empty_equals());
+	TEST(general_equals());
+	TEST(hash());
 }

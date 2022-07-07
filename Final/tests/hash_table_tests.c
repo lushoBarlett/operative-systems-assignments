@@ -112,9 +112,11 @@ static void intensive_work() {
 }
 
 void hash_table_tests() {
-	empty_cell_is_null();
-	find_returns_inserted_value();
-	delete_removes_value();
-	find_among_many();
-	intensive_work();
+	TEST_SUITE(hash_table);
+
+	TEST(empty_cell_is_null());
+	TEST(find_returns_inserted_value());
+	TEST(delete_removes_value());
+	TEST(find_among_many());
+	TEST(intensive_work());
 }

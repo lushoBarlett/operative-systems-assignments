@@ -120,10 +120,12 @@ static void empty_queue_has_null() {
 }
 
 void lru_queue_tests() {
-	empty_dequeue_is_null();
-	enqueue_dequeue_are_the_same();
-	dequeue_removes_bucket();
-	reenqueue_moves_bucket_back();
-	delete_removes_bucket();
-	empty_queue_has_null();
+	TEST_SUITE(lru_queue);
+
+	TEST(empty_dequeue_is_null());
+	TEST(enqueue_dequeue_are_the_same());
+	TEST(dequeue_removes_bucket());
+	TEST(reenqueue_moves_bucket_back());
+	TEST(delete_removes_bucket());
+	TEST(empty_queue_has_null());
 }
