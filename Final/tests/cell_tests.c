@@ -183,7 +183,7 @@ static void concurrent_reinsertion() {
 	free_all(&cell);
 }
 
-static void concurrency_test() {
+static void concurrent_congestion() {
 	cell_t cell = init();
 
 	pthread_t* threads = create_threads(3);
@@ -210,6 +210,6 @@ void cell_tests() {
 	TEST(delete_removes_bucket());
 	TEST(find_among_many());
 	TEST(reinsert_same_key());
-	TEST(concurrency_test());
+	TEST(concurrent_congestion());
 	TEST(concurrent_reinsertion());
 }

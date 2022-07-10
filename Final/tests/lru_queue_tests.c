@@ -119,6 +119,97 @@ static void empty_queue_has_null() {
 	assert(lru_queue.back == NULL);
 }
 
+struct common_args {
+	lru_queue_t* lru_queue;
+	const char* key;
+	const char* value;
+	size_t repetitions;
+};
+
+static void atomic_enqueue(lru_queue_t* lru_queue, bucket_t* bucket) {
+	lru_queue_lock(lru_queue);
+
+	lru_queue_enqueue(lru_queue, bucket);
+
+	lru_queue_unlock(lru_queue);
+}
+
+static void atomic_dequeue(lru_queue_t* lru_queue) {
+	lru_queue_lock(lru_queue);
+
+	bucket_try_free(lru_queue_dequeue(lru_queue));
+
+	lru_queue_unlock(lru_queue);
+}
+
+static void atomic_delete(lru_queue_t* lru_queue, bucket_t* bucket) {
+	lru_queue_lock(lru_queue);
+
+	lru_queue_delete(lru_queue, bucket);
+
+	lru_queue_unlock(lru_queue);
+}
+
+static void enqueuer(struct common_args args) {
+	for (size_t i = 0; i < args.repetitions; i++)
+		atomic_enqueue(args.lru_queue, bucket_from_strings(args.key, args.value));
+}
+
+PTHREAD_API(enqueuer, struct common_args)
+
+static void dequeuer(struct common_args args) {
+	for (size_t i = 0; i < args.repetitions; i++)
+		atomic_dequeue(args.lru_queue);
+}
+
+PTHREAD_API(dequeuer, struct common_args)
+
+static void enqueue_dequeue_concurrently() {
+	lru_queue_t lru_queue = init();
+
+	pthread_t* threads = create_threads(2);
+
+	struct common_args args1 = (struct common_args){ &lru_queue, "key", "value", 100000 };
+	spawn_thread(&threads[0], PTHREAD_CALLER(enqueuer), &args1);
+
+	struct common_args args2 = (struct common_args){ &lru_queue, NULL, NULL, 100000 };
+	spawn_thread(&threads[1], PTHREAD_CALLER(dequeuer), &args2);
+
+	join_threads(threads, 2);
+
+	bucket_t* bucket;
+
+	while ((bucket = lru_queue_dequeue(&lru_queue)))
+		bucket_free(bucket);
+}
+
+static void common(struct common_args args) {
+	for (size_t i = 0; i < args.repetitions; i++) {
+		bucket_t* bucket = bucket_from_strings(args.key, args.value);
+
+		atomic_enqueue(args.lru_queue, bucket);
+
+		atomic_delete(args.lru_queue, bucket);
+
+		bucket_free(bucket);
+	}
+}
+
+PTHREAD_API(common, struct common_args)
+
+static void enqueue_release_lock_delete() {
+	lru_queue_t lru_queue = init();
+
+	pthread_t* threads = create_threads(10);
+
+	struct common_args args = (struct common_args){ &lru_queue, "key", "value", 100000 };
+	spawn_threads(threads, 10, PTHREAD_CALLER(common), &args);
+
+	join_threads(threads, 10);
+
+	assert(NULL == lru_queue_dequeue(&lru_queue));
+}
+
 void lru_queue_tests() {
 	TEST_SUITE(lru_queue);
 
@@ -128,4 +219,6 @@ void lru_queue_tests() {
 	TEST(reenqueue_moves_bucket_back());
 	TEST(delete_removes_bucket());
 	TEST(empty_queue_has_null());
+	TEST(enqueue_dequeue_concurrently());
+	TEST(enqueue_release_lock_delete());
 }

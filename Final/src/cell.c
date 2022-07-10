@@ -31,6 +31,8 @@ void cell_delete_bucket(cell_t* cell, bucket_t* bucket) {
 	if (prev)
 		prev->next_value = next;
 
+	bucket->next_value = bucket->prev_value = NULL;
+
 	if (cell->bucket == bucket)
 		cell->bucket = next;
 }
