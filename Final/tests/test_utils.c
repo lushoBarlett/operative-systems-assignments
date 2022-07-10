@@ -20,6 +20,8 @@ bucket_t* new_bucket() {
 
 	memset(bucket, 0, sizeof(bucket_t));
 
+	counter_init(&bucket->references, 1);
+
 	return bucket;
 }
 
@@ -32,9 +34,9 @@ bucket_t* bucket_from_strings(const char* key, const char* value) {
 	return bucket;
 }
 
-void bucket_try_free(bucket_t* bucket) {
+void bucket_try_dereference(bucket_t* bucket) {
 	if (bucket)
-		bucket_free(bucket);
+		bucket_dereference(bucket);
 }
 
 pthread_t* create_threads(size_t amount) {

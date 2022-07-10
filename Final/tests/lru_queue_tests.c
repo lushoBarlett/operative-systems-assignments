@@ -25,11 +25,14 @@ static void enqueue_dequeue_are_the_same() {
 
 	bucket_t* bucket = new_bucket();
 
-	lru_queue_enqueue(&lru_queue, bucket);
+	lru_queue_enqueue(&lru_queue, SHARE(bucket));
 
-	assert(bucket == lru_queue_dequeue(&lru_queue));
+	bucket_t* front = lru_queue_dequeue(&lru_queue);
 
-	free(bucket);
+	assert(bucket == front);
+
+	bucket_dereference(front);
+	bucket_dereference(bucket);
 }
 
 static void dequeue_removes_bucket() {
@@ -37,14 +40,24 @@ static void dequeue_removes_bucket() {
 
 	bucket_t* bucket = new_bucket();
 
-	lru_queue_enqueue(&lru_queue, bucket);
+	lru_queue_enqueue(&lru_queue, SHARE(bucket));
 
-	lru_queue_dequeue(&lru_queue);
+	bucket_dereference(lru_queue_dequeue(&lru_queue));
 
 	assert(bucket->next_queue == NULL);
 	assert(bucket->prev_queue == NULL);
 
-	free(bucket);
+	bucket_dereference(bucket);
+}
+
+static void assert_equals_and_dereference(bucket_t* expected, bucket_t* got) {
+	assert(expected == got);
+
+	if (expected)
+		bucket_dereference(expected);
+
+	if (got)
+		bucket_dereference(got);
 }
 
 static void reenqueue_moves_bucket_back() {
@@ -54,19 +67,15 @@ static void reenqueue_moves_bucket_back() {
 	bucket_t* middle = new_bucket();
 	bucket_t* back = new_bucket();
 
-	lru_queue_enqueue(&lru_queue, front);
-	lru_queue_enqueue(&lru_queue, middle);
-	lru_queue_enqueue(&lru_queue, back);
+	lru_queue_enqueue(&lru_queue, SHARE(front));
+	lru_queue_enqueue(&lru_queue, SHARE(middle));
+	lru_queue_enqueue(&lru_queue, SHARE(back));
 
 	lru_queue_reenqueue(&lru_queue, middle);
 
-	assert(front == lru_queue_dequeue(&lru_queue));
-	assert(back == lru_queue_dequeue(&lru_queue));
-	assert(middle == lru_queue_dequeue(&lru_queue));
-
-	free(front);
-	free(middle);
-	free(back);
+	assert_equals_and_dereference(front, lru_queue_dequeue(&lru_queue));
+	assert_equals_and_dereference(back, lru_queue_dequeue(&lru_queue));
+	assert_equals_and_dereference(middle, lru_queue_dequeue(&lru_queue));
 }
 
 static void delete_removes_bucket() {
@@ -76,22 +85,20 @@ static void delete_removes_bucket() {
 	bucket_t* middle = new_bucket();
 	bucket_t* back = new_bucket();
 
-	lru_queue_enqueue(&lru_queue, front);
-	lru_queue_enqueue(&lru_queue, middle);
-	lru_queue_enqueue(&lru_queue, back);
+	lru_queue_enqueue(&lru_queue, SHARE(front));
+	lru_queue_enqueue(&lru_queue, SHARE(middle));
+	lru_queue_enqueue(&lru_queue, SHARE(back));
 
 	lru_queue_delete(&lru_queue, middle);
 
-	assert(front == lru_queue_dequeue(&lru_queue));
-	assert(back == lru_queue_dequeue(&lru_queue));
-	assert(NULL == lru_queue_dequeue(&lru_queue));
+	assert_equals_and_dereference(front, lru_queue_dequeue(&lru_queue));
+	assert_equals_and_dereference(back, lru_queue_dequeue(&lru_queue));
+	assert_equals_and_dereference(NULL, lru_queue_dequeue(&lru_queue));
 
 	assert(middle->next_queue == NULL);
 	assert(middle->prev_queue == NULL);
 
-	free(front);
-	free(middle);
-	free(back);
+	bucket_dereference(middle);
 }
 
 static void empty_queue_has_null() {
@@ -102,18 +109,18 @@ static void empty_queue_has_null() {
 
 	lru_queue_enqueue(&lru_queue, new_bucket());
 
-	free(lru_queue_dequeue(&lru_queue));
+	bucket_dereference(lru_queue_dequeue(&lru_queue));
 
 	assert(lru_queue.front == NULL);
 	assert(lru_queue.back == NULL);
 	
 	bucket_t* bucket = new_bucket();
 	
-	lru_queue_enqueue(&lru_queue, bucket);
+	lru_queue_enqueue(&lru_queue, SHARE(bucket));
 
 	lru_queue_delete(&lru_queue, bucket);
 
-	free(bucket);
+	bucket_dereference(bucket);
 
 	assert(lru_queue.front == NULL);
 	assert(lru_queue.back == NULL);
@@ -137,7 +144,7 @@ static void atomic_enqueue(lru_queue_t* lru_queue, bucket_t* bucket) {
 static void atomic_dequeue(lru_queue_t* lru_queue) {
 	lru_queue_lock(lru_queue);
 
-	bucket_try_free(lru_queue_dequeue(lru_queue));
+	bucket_try_dereference(lru_queue_dequeue(lru_queue));
 
 	lru_queue_unlock(lru_queue);
 }
@@ -180,18 +187,18 @@ static void enqueue_dequeue_concurrently() {
 	bucket_t* bucket;
 
 	while ((bucket = lru_queue_dequeue(&lru_queue)))
-		bucket_free(bucket);
+		bucket_dereference(bucket);
 }
 
 static void common(struct common_args args) {
 	for (size_t i = 0; i < args.repetitions; i++) {
 		bucket_t* bucket = bucket_from_strings(args.key, args.value);
 
-		atomic_enqueue(args.lru_queue, bucket);
+		atomic_enqueue(args.lru_queue, SHARE(bucket));
 
 		atomic_delete(args.lru_queue, bucket);
 
-		bucket_free(bucket);
+		bucket_dereference(bucket);
 	}
 }
 

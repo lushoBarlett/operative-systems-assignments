@@ -16,7 +16,7 @@ void cell_unlock(cell_t* cell) {
 bucket_t* cell_find(cell_t* cell, blob_t key) {
 	for (bucket_t* bucket = cell->bucket; bucket; bucket = bucket->next_value)
 		if (blob_equals(key, bucket->key))
-			return bucket;
+			return SHARE(bucket);
 
 	return NULL;
 }
@@ -35,6 +35,8 @@ void cell_delete_bucket(cell_t* cell, bucket_t* bucket) {
 
 	if (cell->bucket == bucket)
 		cell->bucket = next;
+
+	bucket_dereference(bucket);
 }
 
 bucket_t* cell_delete(cell_t* cell, blob_t key) {

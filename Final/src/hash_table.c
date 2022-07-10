@@ -5,6 +5,8 @@
 #define LOAD_FACTOR 0.75
 #define INITIAL_CAPACITY 37
 
+// TODO: put locks
+
 static cell_t* create_cells() {
 	return malloc(sizeof(cell_t) * INITIAL_CAPACITY);
 }
@@ -36,6 +38,9 @@ static void hash_table_reinsert(hash_table_t* hash_table, bucket_t* bucket) {
 
 	bucket->cell_index = cell_index;
 }
+
+// TODO: lock hash table?
+// TODO: make another one?
 
 static void hash_table_expand(hash_table_t* hash_table) {
 	bucket_t** buckets = collect_buckets(hash_table);

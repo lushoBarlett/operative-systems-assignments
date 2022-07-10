@@ -27,17 +27,14 @@ static bucket_t* find_from_string(cell_t* cell, const char* key) {
 static void delete_from_string(cell_t* cell, const char* key) {
 	blob_t bkey = blob_from_string(key);
 
-	bucket_try_free(cell_delete(cell, bkey));
+	bucket_try_dereference(cell_delete(cell, bkey));
 
 	blob_free(bkey);
 }
 
 static void free_all(cell_t* cell) {
-	while (cell->bucket) {
-		bucket_t* bucket = cell->bucket;
-		cell_delete_bucket(cell, bucket);
-		bucket_free(bucket);
-	}
+	while (cell->bucket)
+		cell_delete_bucket(cell, cell->bucket);
 }
 
 static void empty_cell_is_null() {
@@ -58,6 +55,8 @@ static void find_returns_inserted_bucket() {
 	bucket_t* found = find_from_string(&cell, "key");
 
 	assert(found == bucket);
+
+	bucket_dereference(found);
 
 	free_all(&cell);
 }
@@ -89,9 +88,17 @@ static void find_among_many() {
 	cell_insert(&cell, bucket2);
 	cell_insert(&cell, bucket3);
 
-	assert(bucket1 == find_from_string(&cell, "key1"));
-	assert(bucket2 == find_from_string(&cell, "key2"));
-	assert(bucket3 == find_from_string(&cell, "key3"));
+	bucket_t* found1 = find_from_string(&cell, "key1");
+	bucket_t* found2 = find_from_string(&cell, "key2");
+	bucket_t* found3 = find_from_string(&cell, "key3");
+
+	assert(bucket1 == found1);
+	assert(bucket2 == found2);
+	assert(bucket3 == found3);
+
+	bucket_dereference(found1);
+	bucket_dereference(found2);
+	bucket_dereference(found3);
 
 	free_all(&cell);
 }
@@ -102,9 +109,13 @@ static void reinsert_same_key() {
 	for (size_t reps = 0; reps < 10000; reps++) {
 		bucket_t* bucket = bucket_from_strings("key", "value");
 		
-		bucket_try_free(cell_insert(&cell, bucket));
+		bucket_try_dereference(cell_insert(&cell, bucket));
 		
-		assert(bucket == find_from_string(&cell, "key"));
+		bucket_t* found = find_from_string(&cell, "key");
+		
+		assert(bucket == found);
+
+		bucket_dereference(found);
 	}
 
 	free_all(&cell);
@@ -119,7 +130,7 @@ struct common_args {
 
 static void atomic_insert(cell_t* cell, bucket_t* bucket) {
 	cell_lock(cell);
-	bucket_try_free(cell_insert(cell, bucket));
+	bucket_try_dereference(cell_insert(cell, bucket));
 	cell_unlock(cell);
 }
 
@@ -129,21 +140,28 @@ static void atomic_delete(cell_t* cell, const char* key) {
 	cell_unlock(cell);
 }
 
+static bucket_t* atomic_find(cell_t* cell, const char* key) {
+	cell_lock(cell);
+	bucket_t* found = find_from_string(cell, key);
+	cell_unlock(cell);
+	return found;
+}
+
 static void common(struct common_args args) {
 	for (size_t i = 0; i < args.repetitions; i++) {
 		bucket_t* bucket = bucket_from_strings(args.key, args.value);
 
 		atomic_insert(args.cell, bucket);
 
-		cell_lock(args.cell);
-		assert(bucket == find_from_string(args.cell, args.key));
-		cell_unlock(args.cell);
+		bucket_t* found = atomic_find(args.cell, args.key);
+
+		assert(bucket == found);
+
+		bucket_dereference(found);
 
 		atomic_delete(args.cell, args.key);
 
-		cell_lock(args.cell);
-		assert(NULL == find_from_string(args.cell, args.key));
-		cell_unlock(args.cell);
+		assert(NULL == atomic_find(args.cell, args.key));
 	}
 }
 
@@ -157,9 +175,11 @@ static void reinsertion(struct common_args args) {
 
 		atomic_insert(args.cell, bucket);
 
-		cell_lock(args.cell);
-		assert(blob_equals(key, find_from_string(args.cell, args.key)->key));
-		cell_unlock(args.cell);
+		bucket_t* found = atomic_find(args.cell, args.key);
+
+		assert(blob_equals(key, found->key));
+
+		bucket_dereference(found);
 	}
 
 	blob_free(key);
@@ -198,6 +218,8 @@ static void concurrent_congestion() {
 	spawn_thread(&threads[2], PTHREAD_CALLER(common), &args3);
 
 	join_threads(threads, 3);
+
+	assert(cell.bucket == NULL);
 
 	free_all(&cell);
 }

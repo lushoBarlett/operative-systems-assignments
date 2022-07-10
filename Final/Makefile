@@ -21,6 +21,7 @@ TEST := \
 	blob \
 	counter64 \
 	lru_queue \
+	bucket \
 	cell \
 	hash_table
 

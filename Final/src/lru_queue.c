@@ -58,6 +58,8 @@ bucket_t* lru_queue_dequeue(lru_queue_t* lru_queue) {
 
 void lru_queue_delete(lru_queue_t* lru_queue, bucket_t* bucket) {
 	delete_operation(lru_queue, bucket);
+
+	bucket_dereference(bucket);
 }
 
 void lru_queue_reenqueue(lru_queue_t* lru_queue, bucket_t* bucket) {

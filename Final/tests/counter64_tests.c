@@ -28,6 +28,11 @@ static void increment(counter64_t* counter) {
 		counter_increment(counter);
 }
 
+static void decrement(counter64_t* counter) {
+	for (size_t i = 0; i < REPETITIONS; i++)
+		counter_decrement(counter);
+}
+
 static void add(counter64_t* counter) {
 	for (size_t i = 0; i < REPETITIONS; i++)
 		counter_add(counter, 5);
@@ -39,6 +44,7 @@ static void sub(counter64_t* counter) {
 }
 
 PTHREAD_API(increment, counter64_t*)
+PTHREAD_API(decrement, counter64_t*)
 PTHREAD_API(add, counter64_t*)
 PTHREAD_API(sub, counter64_t*)
 
@@ -46,30 +52,32 @@ static void operate() {
 	counter64_t counter = init(50);
 
 	counter_increment(&counter);
+	counter_decrement(&counter);
 	counter_add(&counter, 5);
 	counter_sub(&counter, 2);
 
 	uint64_t value = counter_get(&counter);
 
-	assert(value == 50 + 1 + 5 - 2);
+	assert(value == 50 + 5 - 2);
 }
 
 static void concurrent_operate() {
 	counter64_t counter = init(50);
 
-	pthread_t* threads = create_threads(3);
+	pthread_t* threads = create_threads(4);
 
 	void* arg = &counter;
 
 	spawn_thread(&threads[0], PTHREAD_CALLER(increment), &arg);
-	spawn_thread(&threads[1], PTHREAD_CALLER(add), &arg);
-	spawn_thread(&threads[2], PTHREAD_CALLER(sub), &arg);
+	spawn_thread(&threads[1], PTHREAD_CALLER(decrement), &arg);
+	spawn_thread(&threads[2], PTHREAD_CALLER(add), &arg);
+	spawn_thread(&threads[3], PTHREAD_CALLER(sub), &arg);
 
-	join_threads(threads, 3);
+	join_threads(threads, 4);
 
 	uint64_t value = counter_get(&counter);
 
-	assert(value == 50 + (1 + 5 + 2) * REPETITIONS);
+	assert(value == 50 + (5 + 2) * REPETITIONS);
 }
 
 void counter64_tests() {

@@ -1,6 +1,6 @@
 #include "database.h"
 
-// TODO: make concurrent
+// TODO: make concurrent, put locks
 
 database_t db_create() {
 	database_t database;
@@ -22,17 +22,15 @@ void db_put(database_t* database, blob_t key, blob_t value) {
 	if (old) {
 		lru_queue_delete(&database->lru_queue, old);
 		
-		bucket_free(old);
+		bucket_dereference(old);
 	}
 
-	lru_queue_enqueue(&database->lru_queue, bucket);
+	lru_queue_enqueue(&database->lru_queue, SHARE(bucket));
 
 	counter_increment(&database->record.puts);
 }
 
-// TODO: return blob pointers?
-
-const bucket_t* db_get(database_t* database, blob_t key) {
+bucket_t* db_get(database_t* database, blob_t key) {
 	bucket_t* bucket = hash_table_lookup(&database->hash_table, key);
 
 	if (bucket)
@@ -61,7 +59,7 @@ void db_delete(database_t* database, blob_t key) {
 	bucket_t* bucket = db_take(database, key);
 
 	if (bucket)
-		bucket_free(bucket);
+		bucket_dereference(bucket);
 
 	counter_increment(&database->record.dels);
 }
@@ -75,7 +73,7 @@ static void free_one_bucket(database_t* database) {
 
 	hash_table_delete(&database->hash_table, bucket->key);
 
-	bucket_free(bucket);
+	bucket_dereference(bucket);
 }
 
 void* db_memsafe_malloc(database_t* database, size_t bytes) {

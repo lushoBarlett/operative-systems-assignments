@@ -1,6 +1,7 @@
 #pragma once
 
 #include "blob.h"
+#include "counter64.h"
 
 #include <stddef.h>
 
@@ -25,6 +26,8 @@ typedef struct bucket_t {
 	 */
 	blob_t key;
 	blob_t value;
+
+	counter64_t references;
 
 	/*
 	 * TODO: explicar
@@ -63,4 +66,9 @@ typedef struct bucket_t {
 
 bucket_t* bucket_create(blob_t key, blob_t value);
 
-void bucket_free(bucket_t* bucket);
+void bucket_reference(bucket_t* bucket);
+
+void bucket_dereference(bucket_t* bucket);
+
+#define SHARE(bucket) \
+(bucket_reference(bucket), bucket)

@@ -16,11 +16,8 @@ static hash_table_t init() {
 
 static void free_all(hash_table_t* hash_table) {
 	for (size_t i = 0; i < hash_table->capacity; i++)
-		while (hash_table->cells[i].bucket) {
-			bucket_t* bucket = hash_table->cells[i].bucket;
-			cell_delete_bucket(&hash_table->cells[i], bucket);
-			bucket_free(bucket);
-		}
+		while (hash_table->cells[i].bucket)
+			cell_delete_bucket(&hash_table->cells[i], hash_table->cells[i].bucket);
 
 	free(hash_table->cells);
 }
@@ -47,6 +44,8 @@ static void find_returns_inserted_value() {
 
 	assert(blob_equals(found->value, value));
 
+	bucket_dereference(found);
+
 	free_all(&hash_table);
 }
 
@@ -60,7 +59,7 @@ static void delete_removes_value() {
 
 	key = blob_from_string("key");
 
-	bucket_free(hash_table_delete(&hash_table, key));
+	bucket_dereference(hash_table_delete(&hash_table, key));
 
 	assert(hash_table_lookup(&hash_table, key) == NULL);
 
@@ -84,9 +83,17 @@ static void find_among_many() {
 	hash_table_insert(&hash_table, bucket_create(key2, value2));
 	hash_table_insert(&hash_table, bucket_create(key3, value3));
 
-	assert(blob_equals(value1, hash_table_lookup(&hash_table, key1)->value));
-	assert(blob_equals(value2, hash_table_lookup(&hash_table, key2)->value));
-	assert(blob_equals(value3, hash_table_lookup(&hash_table, key3)->value));
+	bucket_t* found1 = hash_table_lookup(&hash_table, key1);
+	bucket_t* found2 = hash_table_lookup(&hash_table, key2);
+	bucket_t* found3 = hash_table_lookup(&hash_table, key3);
+
+	assert(blob_equals(value1, found1->value));
+	assert(blob_equals(value2, found2->value));
+	assert(blob_equals(value3, found3->value));
+
+	bucket_dereference(found1);
+	bucket_dereference(found2);
+	bucket_dereference(found3);
 
 	free_all(&hash_table);
 }
@@ -110,11 +117,16 @@ static void intensive_work() {
 
 	assert(hash_table.size == 256);
 
-	for (size_t i = 0; i < 256; i++)
-		assert(blob_equals(values[i], hash_table_lookup(&hash_table, keys[i])->value));
+	for (size_t i = 0; i < 256; i++) {
+		bucket_t* found = hash_table_lookup(&hash_table, keys[i]);
+
+		assert(blob_equals(values[i], found->value));
+
+		bucket_dereference(found);
+	}
 
 	for (size_t i = 0; i < 256; i++)
-		bucket_free(hash_table_delete(&hash_table, keys[i]));
+		bucket_dereference(hash_table_delete(&hash_table, keys[i]));
 
 	assert(hash_table.size == 0);
 
