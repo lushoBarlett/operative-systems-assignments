@@ -1,3 +1,4 @@
+#pragma once
 #include <netinet/in.h>
 #include <netinet/ip.h>
 #include <pthread.h>
@@ -8,6 +9,8 @@
 #include <sys/types.h>
 #include <unistd.h>
 #include <sys/epoll.h>
+#include "text_parser.h"
+#define MAX_MSG_SIZE 2048
 
 /*
  * Constantes usadas por el protocolo
@@ -27,165 +30,53 @@ enum Protocol {
 	EUNK = 115,
 };
 
-void quit(const char* error_message) {
-	perror(error_message);
+typedef enum {
+	LSOCK, CLIENT,
+} Sock_type;
 
-	abort();
-}
+typedef enum {
+	BIN, TEXT,
+} Cli_type;
 
-int require_accept(int listen_socket) {
-	int connection_socket = accept(listen_socket, NULL, NULL);
-	
-	if (connection_socket < 0)
-		quit("accept");
+struct fdinfo {
+	Cli_type cli_type;
+	Sock_type sock_type;
+	int fd;
+	buf_t* buf;
+};
 
-	return connection_socket;
-}
+void quit(const char* error_message);
 
-int require_socket() {
-	int listen_socket = socket(AF_INET, SOCK_STREAM, 0);
+int require_accept(int listen_socket);
 
-	if (listen_socket < 0)
-		quit("socket");
+int require_socket();
 
-	int yes = 1;
+int require_bind(int listen_socket, int port);
 
-	if (setsockopt(listen_socket, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof yes) == 1)
-		quit("setsockopt");
+int require_listen(int listen_socket, int connections);
 
-	return listen_socket;
-}
+int configure_lsock(int port);
 
-int require_bind(int listen_socket, int port) {
-	struct sockaddr_in socket_address;
+size_t core_count();
 
-	memset(&socket_address, 0, sizeof socket_address);
-	socket_address.sin_family = AF_INET;
-	socket_address.sin_port = htons(port);
-	socket_address.sin_addr.s_addr = htonl(INADDR_ANY);
+int require_epoll();
 
-	if (bind(listen_socket, (const struct sockaddr*)&socket_address, sizeof socket_address) < 0)
-		quit("bind");
-}
+void poll_set_event(struct epoll_event* ev, Sock_type type);
 
-int require_listen(int listen_socket, int connections) { 
-	if (listen(listen_socket, connections) < 0)
-		quit("listen");
-}
+int poll_socket(int socket, int epfd, Sock_type sock_type, Cli_type cli_type);
 
-int configure_lsock(int port) {
-	int listen_socket = require_socket();
-	
-	require_bind(listen_socket, port);
-	
-	require_listen(listen_socket, 10000);
-	
-	return listen_socket;
-}
+int repoll_socket(struct fdinfo*, int epfd, Sock_type type);
 
-size_t core_count() {
-	return sysconf(_SC_NPROCESSORS_ONLN);
-}
+void require_poll_socket(int socket, int epfd, Cli_type type);
 
-int require_epoll() {
-	int epfd = epoll_create(1);
+void handle_event(int epfd, struct epoll_event event);
 
-	if (epfd < 0)
-		quit("epoll");
+void service(int epfd);
 
-	return epfd;
-}
+void* service_wrap(void* arg);
 
-struct epoll_event poll_oneshot(int socket) {
-	struct epoll_event event;
-	event.data.fd = socket;
-	event.events = EPOLLIN | EPOLLONESHOT;
-	return event;
-}
+void spawn_service_threads(pthread_t* threads, size_t thread_amount, int epfd);
 
-int poll_socket(int socket, int epfd) {
-	struct epoll_event event = poll_oneshot(socket);
-	return epoll_ctl(epfd, EPOLL_CTL_ADD, socket, &event);
-}
+void join_service_threads(pthread_t* threads, size_t thread_amount);
 
-int repoll_socket(int socket, int epfd) {
-	struct epoll_event event = poll_oneshot(socket);
-	return epoll_ctl(epfd, EPOLL_CTL_MOD, socket, &event);
-}
-
-void require_poll_socket(int socket, int epfd) {
-	if (poll_socket(socket, epfd) < 0)
-		quit("poll socket");
-}
-
-// TODO: according to the port, call text or binary protocols
-void handle_event(int listen_socket, int epfd, struct epoll_event event) {
-	if (event.data.fd == listen_socket) {
-		// TODO: handle error (jump to repoll)
-		int connection_socket = accept(listen_socket, NULL, NULL);
-
-		// TODO: handle error (close connection)
-		poll_socket(connection_socket, epfd);
-
-		repoll_socket(listen_socket, epfd);
-	} else {
-		// TODO: process message (build read automaton)
-	}
-}
-
-void service(int epfd, int listen_socket) {
-	struct epoll_event event;
-
-	while (1) {
-		int n = epoll_wait(epfd, &event, 1, -1);
-
-		// TODO: error handling
-		if (n < 0)
-			quit("epoll_wait");
-
-		for (size_t i = 0; i < n; i++)
-			handle_event(listen_socket, epfd, event);
-	}
-}
-
-void* service_wrap(void* arg) {
-	int epfd = *(int*)arg;
-	int listen_socket = *(int*)(arg + 1);
-
-	service(epfd, listen_socket);
-
-	return NULL;
-}
-
-void spawn_service_threads(pthread_t* threads, size_t thread_amount, int epfd, int listen_socket) {
-	int args[] = {epfd, listen_socket};
-	for (size_t i = 0; i < thread_amount; i++)
-		pthread_create(&threads[i], NULL, service_wrap, args);
-}
-
-void join_service_threads(pthread_t* threads, size_t thread_amount) {
-	for (size_t i = 0; i < thread_amount; i++)
-		pthread_join(threads[i], NULL);
-}
-
-void service_threads(pthread_t* threads, size_t thread_amount, int epfd, int listen_socket) {
-	spawn_service_threads(threads, thread_amount, epfd, listen_socket);
-	join_service_threads(threads, thread_amount);
-}
-
-
-int main() {
-	int epfd = require_epoll();
-
-	int listen_socket = configure_lsock(8000);
-
-	require_poll_socket(listen_socket, epfd);
-
-	size_t thread_amount = core_count();
-	
-	pthread_t* threads = malloc(sizeof(*threads) * thread_amount);
-
-	service_threads(threads, thread_amount, epfd, listen_socket);
-
-	free(threads);
-}
+void service_threads(pthread_t* threads, size_t thread_amount, int epfd);
