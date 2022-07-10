@@ -4,7 +4,7 @@ TESTS := tests
 BIN   := bin
 BUILD := build
 
-FLAGS := -Wall -Wextra -Werror -std=c17
+FLAGS := -Wall -Wextra -Werror -std=c17 -g
 
 
 

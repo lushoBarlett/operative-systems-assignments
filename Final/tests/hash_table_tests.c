@@ -1,6 +1,7 @@
 #include "hash_table_tests.h"
 
 #include <assert.h>
+#include <stdlib.h>
 
 #include "../src/hash_table.h"
 #include "test_utils.h"
@@ -13,14 +14,25 @@ static hash_table_t init() {
 	return hash_table;
 }
 
+static void free_all(hash_table_t* hash_table) {
+	for (size_t i = 0; i < hash_table->capacity; i++)
+		while (hash_table->cells[i].bucket) {
+			bucket_t* bucket = hash_table->cells[i].bucket;
+			cell_delete_bucket(&hash_table->cells[i], bucket);
+			bucket_free(bucket);
+		}
+
+	free(hash_table->cells);
+}
+
 static void empty_cell_is_null() {
 	hash_table_t hash_table = init();
 
 	blob_t key = blob_empty();
 
-	assert(blob_equals(hash_table_lookup(&hash_table, key), blob_empty()));
+	assert(hash_table_lookup(&hash_table, key) == NULL);
 
-	hash_table_free(&hash_table);
+	free_all(&hash_table);
 }
 
 static void find_returns_inserted_value() {
@@ -29,13 +41,13 @@ static void find_returns_inserted_value() {
 	blob_t key = blob_from_string("key");
 	blob_t value = blob_from_string("value");
 
-	hash_table_insert(&hash_table, key, value);
+	hash_table_insert(&hash_table, bucket_create(key, value));
 
-	blob_t found = hash_table_lookup(&hash_table, key);
+	bucket_t* found = hash_table_lookup(&hash_table, key);
 
-	assert(blob_equals(found, value));
+	assert(blob_equals(found->value, value));
 
-	hash_table_free(&hash_table);
+	free_all(&hash_table);
 }
 
 static void delete_removes_value() {
@@ -44,17 +56,15 @@ static void delete_removes_value() {
 	blob_t key = blob_from_string("key");
 	blob_t value = blob_from_string("value");
 
-	hash_table_insert(&hash_table, key, value);
+	hash_table_insert(&hash_table, bucket_create(key, value));
 
 	key = blob_from_string("key");
 
-	hash_table_delete(&hash_table, key);
+	bucket_free(hash_table_delete(&hash_table, key));
 
-	blob_t found = hash_table_lookup(&hash_table, key);
+	assert(hash_table_lookup(&hash_table, key) == NULL);
 
-	assert(blob_equals(found, blob_empty()));
-
-	hash_table_free(&hash_table);
+	free_all(&hash_table);
 
 	blob_free(key);
 }
@@ -70,15 +80,15 @@ static void find_among_many() {
 	blob_t value2 = blob_from_string("value2");
 	blob_t value3 = blob_from_string("value3");
 
-	hash_table_insert(&hash_table, key1, value1);
-	hash_table_insert(&hash_table, key2, value2);
-	hash_table_insert(&hash_table, key3, value3);
+	hash_table_insert(&hash_table, bucket_create(key1, value1));
+	hash_table_insert(&hash_table, bucket_create(key2, value2));
+	hash_table_insert(&hash_table, bucket_create(key3, value3));
 
-	assert(blob_equals(value1, hash_table_lookup(&hash_table, key1)));
-	assert(blob_equals(value2, hash_table_lookup(&hash_table, key2)));
-	assert(blob_equals(value3, hash_table_lookup(&hash_table, key3)));
+	assert(blob_equals(value1, hash_table_lookup(&hash_table, key1)->value));
+	assert(blob_equals(value2, hash_table_lookup(&hash_table, key2)->value));
+	assert(blob_equals(value3, hash_table_lookup(&hash_table, key3)->value));
 
-	hash_table_free(&hash_table);
+	free_all(&hash_table);
 }
 
 static void intensive_work() {
@@ -95,20 +105,20 @@ static void intensive_work() {
 		keys[i] = blob_from_string(string);
 		values[i] = blob_from_string(string);
 
-		hash_table_insert(&hash_table, keys[i], values[i]);
+		hash_table_insert(&hash_table, bucket_create(keys[i], values[i]));
 	}
 
 	assert(hash_table.size == 256);
 
 	for (size_t i = 0; i < 256; i++)
-		assert(blob_equals(values[i], hash_table_lookup(&hash_table, keys[i])));
+		assert(blob_equals(values[i], hash_table_lookup(&hash_table, keys[i])->value));
 
 	for (size_t i = 0; i < 256; i++)
-		hash_table_delete(&hash_table, keys[i]);
+		bucket_free(hash_table_delete(&hash_table, keys[i]));
 
 	assert(hash_table.size == 0);
 
-	hash_table_free(&hash_table);
+	free_all(&hash_table);
 }
 
 void hash_table_tests() {

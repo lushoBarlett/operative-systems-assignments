@@ -32,6 +32,11 @@ bucket_t* bucket_from_strings(const char* key, const char* value) {
 	return bucket;
 }
 
+void bucket_try_free(bucket_t* bucket) {
+	if (bucket)
+		bucket_free(bucket);
+}
+
 pthread_t* create_threads(size_t amount) {
 	return malloc(sizeof(pthread_t) * amount);
 }

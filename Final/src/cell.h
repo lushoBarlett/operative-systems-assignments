@@ -17,10 +17,14 @@ typedef struct {
 
 void cell_init(cell_t* cell);
 
-void cell_insert(cell_t* cell, bucket_t* bucket);
+void cell_lock(cell_t* cell);
 
-const bucket_t* cell_find(cell_t* cell, blob_t key);
+void cell_unlock(cell_t* cell);
 
-void cell_delete(cell_t* cell, blob_t key);
+bucket_t* cell_find(cell_t* cell, blob_t key);
 
-void cell_free(cell_t* cell);
+void cell_delete_bucket(cell_t* cell, bucket_t* bucket);
+
+bucket_t* cell_delete(cell_t* cell, blob_t key);
+
+bucket_t* cell_insert(cell_t* cell, bucket_t* bucket);

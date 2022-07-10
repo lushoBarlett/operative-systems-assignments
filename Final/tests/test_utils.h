@@ -18,6 +18,8 @@ bucket_t* new_bucket();
 
 bucket_t* bucket_from_strings(const char* key, const char* value);
 
+void bucket_try_free(bucket_t* bucket);
+
 #define PTHREAD_CALLER(FUNCTION) \
 __pthread_api_##FUNCTION
 

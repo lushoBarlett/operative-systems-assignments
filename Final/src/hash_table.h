@@ -16,10 +16,10 @@ typedef struct {
 
 void hash_table_init(hash_table_t* hash_table);
 
-bucket_t* hash_table_insert(hash_table_t* hash_table, blob_t key, blob_t value);
+bucket_t* hash_table_insert(hash_table_t* hash_table, bucket_t* bucket);
 
-blob_t hash_table_lookup(hash_table_t* hash_table, blob_t key);
+bucket_t* hash_table_lookup(hash_table_t* hash_table, blob_t key);
 
-void hash_table_delete(hash_table_t* hash_table, blob_t key);
+void hash_table_delete_bucket(hash_table_t* hash_table, bucket_t* bucket);
 
-void hash_table_free(hash_table_t* hash_table);
+bucket_t* hash_table_delete(hash_table_t* hash_table, blob_t key);

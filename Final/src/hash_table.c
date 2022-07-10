@@ -53,49 +53,40 @@ static void hash_table_expand(hash_table_t* hash_table) {
 	free(buckets);
 }
 
-bucket_t* hash_table_insert(hash_table_t* hash_table, blob_t key, blob_t value) {
-	size_t cell_index = blob_hash(key) % hash_table->capacity;
+bucket_t* hash_table_insert(hash_table_t* hash_table, bucket_t* bucket) {
+	size_t cell_index = blob_hash(bucket->key) % hash_table->capacity;
 
-	bucket_t* new_bucket = bucket_create(key, value);
+	bucket_t* old = cell_insert(&hash_table->cells[cell_index], bucket);
 
-	cell_insert(&hash_table->cells[cell_index], new_bucket);
-
-	new_bucket->cell_index = cell_index;
+	bucket->cell_index = cell_index;
 
 	hash_table->size++;
 
 	if (hash_table->size / (double) hash_table->capacity > LOAD_FACTOR)
 		hash_table_expand(hash_table);
 
-	return new_bucket;
+	return old;
 }
 
-blob_t hash_table_lookup(hash_table_t* hash_table, blob_t key) {
+bucket_t* hash_table_lookup(hash_table_t* hash_table, blob_t key) {
 	size_t cell_index = blob_hash(key) % hash_table->capacity;
 
-	const bucket_t* bucket = cell_find(&hash_table->cells[cell_index], key);
-
-	if (!bucket)
-		return blob_empty();
-
-	return bucket->value;
+	return cell_find(&hash_table->cells[cell_index], key);
 }
 
-void hash_table_delete(hash_table_t* hash_table, blob_t key) {
-	size_t cell_index = blob_hash(key) % hash_table->capacity;
-
-	// TODO: optimize
-	if (!cell_find(&hash_table->cells[cell_index], key))
-		return;
-
+void hash_table_delete_bucket(hash_table_t* hash_table, bucket_t* bucket) {
 	hash_table->size--;
 
-	cell_delete(&hash_table->cells[cell_index], key);
+	cell_delete_bucket(&hash_table->cells[bucket->cell_index], bucket);
 }
 
-void hash_table_free(hash_table_t* hash_table) {
-	for (size_t i = 0; i < hash_table->capacity; i++)
-		cell_free(&hash_table->cells[i]);
+bucket_t* hash_table_delete(hash_table_t* hash_table, blob_t key) {
+	size_t cell_index = blob_hash(key) % hash_table->capacity;
 
-	free(hash_table->cells);
+	bucket_t* bucket = cell_find(&hash_table->cells[cell_index], key);
+	 
+	if (bucket)
+		hash_table_delete_bucket(hash_table, bucket);
+
+	return bucket;
 }

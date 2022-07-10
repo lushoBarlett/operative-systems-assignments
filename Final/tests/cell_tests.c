@@ -1,6 +1,7 @@
 #include "cell_tests.h"
 
 #include <assert.h>
+#include <stdlib.h>
 
 #include "../src/cell.h"
 #include "test_utils.h"
@@ -13,10 +14,10 @@ static cell_t init() {
 	return cell;
 }
 
-static const bucket_t* find_from_string(cell_t* cell, const char* key) {
+static bucket_t* find_from_string(cell_t* cell, const char* key) {
 	blob_t bkey = blob_from_string(key);
 
-	const bucket_t* found = cell_find(cell, bkey);
+	bucket_t* found = cell_find(cell, bkey);
 
 	blob_free(bkey);
 
@@ -26,9 +27,17 @@ static const bucket_t* find_from_string(cell_t* cell, const char* key) {
 static void delete_from_string(cell_t* cell, const char* key) {
 	blob_t bkey = blob_from_string(key);
 
-	cell_delete(cell, bkey);
+	bucket_try_free(cell_delete(cell, bkey));
 
 	blob_free(bkey);
+}
+
+static void free_all(cell_t* cell) {
+	while (cell->bucket) {
+		bucket_t* bucket = cell->bucket;
+		cell_delete_bucket(cell, bucket);
+		bucket_free(bucket);
+	}
 }
 
 static void empty_cell_is_null() {
@@ -37,8 +46,6 @@ static void empty_cell_is_null() {
 	blob_t key = blob_empty();
 
 	assert(cell_find(&cell, key) == NULL);
-
-	cell_free(&cell);
 }
 
 static void find_returns_inserted_bucket() {
@@ -48,11 +55,11 @@ static void find_returns_inserted_bucket() {
 
 	cell_insert(&cell, bucket);
 
-	const bucket_t* found = find_from_string(&cell, "key");
+	bucket_t* found = find_from_string(&cell, "key");
 
 	assert(found == bucket);
 
-	cell_free(&cell);
+	free_all(&cell);
 }
 
 static void delete_removes_bucket() {
@@ -64,11 +71,11 @@ static void delete_removes_bucket() {
 
 	delete_from_string(&cell, "key");
 
-	const bucket_t* found = find_from_string(&cell, "key");
+	bucket_t* found = find_from_string(&cell, "key");
 
 	assert(found == NULL);
 
-	cell_free(&cell);
+	free_all(&cell);
 }
 
 static void find_among_many() {
@@ -86,7 +93,7 @@ static void find_among_many() {
 	assert(bucket2 == find_from_string(&cell, "key2"));
 	assert(bucket3 == find_from_string(&cell, "key3"));
 
-	cell_free(&cell);
+	free_all(&cell);
 }
 
 static void reinsert_same_key() {
@@ -95,12 +102,12 @@ static void reinsert_same_key() {
 	for (size_t reps = 0; reps < 10000; reps++) {
 		bucket_t* bucket = bucket_from_strings("key", "value");
 		
-		cell_insert(&cell, bucket);
+		bucket_try_free(cell_insert(&cell, bucket));
 		
 		assert(bucket == find_from_string(&cell, "key"));
 	}
 
-	cell_free(&cell);
+	free_all(&cell);
 }
 
 struct common_args {
@@ -114,9 +121,9 @@ static void common(struct common_args args) {
 	for (size_t i = 0; i < args.repetitions; i++) {
 		bucket_t* bucket = bucket_from_strings(args.key, args.value);
 
-		cell_insert(args.cell, bucket);
+		bucket_try_free(cell_insert(args.cell, bucket));
 
-		const bucket_t* found = find_from_string(args.cell, args.key);
+		bucket_t* found = find_from_string(args.cell, args.key);
 		
 		assert(bucket == found);
 
@@ -134,9 +141,9 @@ static void reinsertion(struct common_args args) {
 	for (size_t i = 0; i < args.repetitions; i++) {
 		bucket_t* bucket = bucket_from_strings(args.key, args.value);
 
-		cell_insert(args.cell, bucket);
+		bucket_try_free(cell_insert(args.cell, bucket));
 
-		const bucket_t* found = find_from_string(args.cell, args.key);
+		bucket_t* found = find_from_string(args.cell, args.key);
 
 		assert(found);
 
@@ -161,7 +168,7 @@ static void concurrent_reinsertion() {
 
 	join_threads(threads, 2);
 
-	cell_free(&cell);
+	free_all(&cell);
 }
 
 static void concurrency_test() {
@@ -180,7 +187,7 @@ static void concurrency_test() {
 
 	join_threads(threads, 3);
 
-	cell_free(&cell);
+	free_all(&cell);
 }
 
 void cell_tests() {

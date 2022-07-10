@@ -17,4 +17,5 @@ bucket_t* bucket_create(blob_t key, blob_t value) {
 void bucket_free(bucket_t* bucket) {
 	blob_free(bucket->key);
 	blob_free(bucket->value);
+	free(bucket);
 }
