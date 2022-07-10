@@ -117,19 +117,33 @@ struct common_args {
 	size_t repetitions;
 };
 
+static void atomic_insert(cell_t* cell, bucket_t* bucket) {
+	cell_lock(cell);
+	bucket_try_free(cell_insert(cell, bucket));
+	cell_unlock(cell);
+}
+
+static void atomic_delete(cell_t* cell, const char* key) {
+	cell_lock(cell);
+	delete_from_string(cell, key);
+	cell_unlock(cell);
+}
+
 static void common(struct common_args args) {
 	for (size_t i = 0; i < args.repetitions; i++) {
 		bucket_t* bucket = bucket_from_strings(args.key, args.value);
 
-		bucket_try_free(cell_insert(args.cell, bucket));
+		atomic_insert(args.cell, bucket);
 
-		bucket_t* found = find_from_string(args.cell, args.key);
-		
-		assert(bucket == found);
+		cell_lock(args.cell);
+		assert(bucket == find_from_string(args.cell, args.key));
+		cell_unlock(args.cell);
 
-		delete_from_string(args.cell, args.key);
+		atomic_delete(args.cell, args.key);
 
+		cell_lock(args.cell);
 		assert(NULL == find_from_string(args.cell, args.key));
+		cell_unlock(args.cell);
 	}
 }
 
@@ -141,13 +155,11 @@ static void reinsertion(struct common_args args) {
 	for (size_t i = 0; i < args.repetitions; i++) {
 		bucket_t* bucket = bucket_from_strings(args.key, args.value);
 
-		bucket_try_free(cell_insert(args.cell, bucket));
+		atomic_insert(args.cell, bucket);
 
-		bucket_t* found = find_from_string(args.cell, args.key);
-
-		assert(found);
-
-		assert(blob_equals(key, found->key));
+		cell_lock(args.cell);
+		assert(blob_equals(key, find_from_string(args.cell, args.key)->key));
+		cell_unlock(args.cell);
 	}
 
 	blob_free(key);
