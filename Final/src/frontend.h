@@ -10,6 +10,7 @@
 #include <unistd.h>
 #include <sys/epoll.h>
 #include "text_parser.h"
+
 #define MAX_MSG_SIZE 2048
 
 /*
@@ -35,13 +36,14 @@ typedef enum {
 } Sock_type;
 
 typedef enum {
-	BIN, TEXT,
+	BINARY, TEXT,
 } Cli_type;
 
 struct fdinfo {
 	Cli_type cli_type;
 	Sock_type sock_type;
 	int fd;
+	struct state_machine* sm;
 	buf_t* buf;
 };
 

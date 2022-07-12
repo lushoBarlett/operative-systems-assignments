@@ -1,5 +1,6 @@
 #include "frontend.h"
 #include "text_parser.h"
+#include "binary_parser.h"
 
 void quit(const char* error_message) {
 	perror(error_message);
@@ -83,10 +84,13 @@ int poll_socket(int socket, int epfd, Sock_type sock_type, Cli_type cli_type) {
 
 	fdinfo = malloc(sizeof (struct fdinfo));
 	fdinfo->sock_type = sock_type;
+	fdinfo->cli_type = cli_type;
 	fdinfo->fd = socket;
 	if (sock_type == CLIENT) {
-		fdinfo->cli_type = cli_type;
-		fdinfo->buf = buf_create(MAX_MSG_SIZE);
+		if (cli_type == BINARY)
+			fdinfo->sm = sm_init();
+		if (cli_type == TEXT)
+			fdinfo->buf = buf_create(MAX_MSG_SIZE);
 	}
 
 	ev.data.ptr = fdinfo;
@@ -110,7 +114,10 @@ void require_poll_socket(int socket, int epfd, Cli_type type) {
 void kill_cli(int epfd, struct fdinfo* fdinfo){
 	epoll_ctl(epfd, EPOLL_CTL_DEL, fdinfo->fd, NULL);
 	close(fdinfo->fd);
-	buf_destroy(fdinfo->buf);
+	if (fdinfo->cli_type == BINARY)
+		sm_destroy(fdinfo->sm);
+	else
+		buf_destroy(fdinfo->buf);
 	free(fdinfo);
 }
 
@@ -118,12 +125,11 @@ void kill_cli(int epfd, struct fdinfo* fdinfo){
 void handle_event(int epfd, struct epoll_event event) {
 	struct fdinfo *fdinfo = event.data.ptr;
 	int listen_socket, connection_socket, rc;
-	char buf[MAX_MSG_SIZE];
 
 	switch (fdinfo->sock_type) {
 	case LSOCK:
 		listen_socket = fdinfo->fd;
-		connection_socket = accept(listen_socket, NULL, NULL);
+		connection_socket = accept4(listen_socket, NULL, NULL, SOCK_NONBLOCK);
 		poll_socket(connection_socket, epfd, CLIENT, fdinfo->cli_type);
 		repoll_socket(fdinfo, epfd, LSOCK);
 		break;
@@ -142,10 +148,13 @@ void handle_event(int epfd, struct epoll_event event) {
 		}
 
 		if (event.events & EPOLLIN) {
-			rc = read(fdinfo->fd, buf, 2048);
-			parse_recv(fdinfo->buf, buf, rc);
-			printf("read this: %s\n", buf);
-			memset(buf, 0, sizeof(buf));
+			if (fdinfo->cli_type == TEXT) {
+				buf_can_read(fdinfo->buf, fdinfo->fd);
+			}
+
+			if (fdinfo->cli_type == BINARY) {
+				sm_can_read(fdinfo->sm, fdinfo->fd);
+			}
 		}
 
 		repoll_socket(fdinfo, epfd, CLIENT);
@@ -201,7 +210,7 @@ int main() {
 	int listen_bin_sock = configure_lsock(8001);
 
 	require_poll_socket(listen_txt_sock, epfd, TEXT);
-	require_poll_socket(listen_bin_sock, epfd, BIN);
+	require_poll_socket(listen_bin_sock, epfd, BINARY);
 
 	size_t thread_amount = core_count();
 	
