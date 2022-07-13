@@ -9,12 +9,24 @@
  * nuestras necesidades de almacenamiento.
  */
 typedef struct {
-	size_t size;
+	counter64_t size;
 	size_t capacity;
 	cell_t* cells;
 } hash_table_t;
 
-void hash_table_init(hash_table_t* hash_table);
+#define INITIAL_CAPACITY 37
+
+cell_t* hash_table_cells(size_t capacity);
+
+void hash_table_init(hash_table_t* hash_table, cell_t* cells, size_t capacity);
+
+void hash_table_lock(hash_table_t* hash_table);
+
+void hash_table_unlock(hash_table_t* hash_table);
+
+int hash_table_should_expand(hash_table_t* hash_table);
+
+void hash_table_move(hash_table_t* hash_table, hash_table_t* new_hash_table);
 
 void hash_table_insert(hash_table_t* hash_table, bucket_t* bucket);
 

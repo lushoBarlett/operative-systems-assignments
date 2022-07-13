@@ -3,93 +3,106 @@
 #include <stdlib.h>
 
 #define LOAD_FACTOR 0.75
-#define INITIAL_CAPACITY 37
 
-// TODO: put locks
-
-static cell_t* create_cells() {
-	return malloc(sizeof(cell_t) * INITIAL_CAPACITY);
+cell_t* hash_table_cells(size_t capacity) {
+	return malloc(sizeof(cell_t) * capacity);
 }
 
-void hash_table_init(hash_table_t* hash_table) {
-	hash_table->cells = create_cells();
-	hash_table->size = 0;
-	hash_table->capacity = INITIAL_CAPACITY;
+void hash_table_init(hash_table_t* hash_table, cell_t* cells, size_t capacity) {
+	hash_table->cells = cells;
+	counter_init(&hash_table->size, 0);
+	hash_table->capacity = capacity;
 
 	for (size_t i = 0; i < hash_table->capacity; i++)
 		cell_init(&hash_table->cells[i]);
 }
 
-static bucket_t** collect_buckets(hash_table_t* hash_table) {
-	bucket_t** buckets = malloc(sizeof(*buckets) * hash_table->size);
-	size_t bucket_index = 0;
+void hash_table_lock(hash_table_t* hash_table) {
+	for (size_t i = 0; i < hash_table->capacity; i++)
+		cell_lock(&hash_table->cells[i]);
+}
 
+void hash_table_unlock(hash_table_t* hash_table) {
+	for (size_t i = 0; i < hash_table->capacity; i++)
+		cell_unlock(&hash_table->cells[i]);
+}
+
+static size_t hash(hash_table_t* hash_table, blob_t key) {
+	return blob_hash(key) % hash_table->capacity;
+}
+
+static cell_t* hashed_cell(hash_table_t* hash_table, blob_t key) {
+	size_t cell_index = blob_hash(key) % hash_table->capacity;
+
+	return &hash_table->cells[cell_index];
+}
+
+int hash_table_should_expand(hash_table_t* hash_table) {
+	return counter_get(&hash_table->size) / (double) hash_table->capacity > LOAD_FACTOR;
+}
+
+// TODO: write prefering rwlock? seems legit useful here
+
+void hash_table_move(hash_table_t* hash_table, hash_table_t* new_hash_table) {
 	for (size_t i = 0; i < hash_table->capacity; i++)
 		for (bucket_t* bucket = hash_table->cells[i].bucket; bucket; bucket = bucket->next_value)
-			buckets[bucket_index++] = bucket;
-
-	return buckets;
-}
-
-static void hash_table_reinsert(hash_table_t* hash_table, bucket_t* bucket) {
-	size_t cell_index = blob_hash(bucket->key) % hash_table->capacity;
-
-	cell_insert(&hash_table->cells[cell_index], bucket);
-
-	bucket->cell_index = cell_index;
-}
-
-// TODO: lock hash table?
-// TODO: make another one?
-
-static void hash_table_expand(hash_table_t* hash_table) {
-	bucket_t** buckets = collect_buckets(hash_table);
-
-	hash_table->capacity *= 2;
-
-	hash_table->cells = realloc(hash_table->cells, sizeof(cell_t) * hash_table->capacity);
-
-	for (size_t i = 0; i < hash_table->capacity; i++)
-		cell_init(&hash_table->cells[i]);
-
-	for (size_t i = 0; i < hash_table->size; i++)
-		hash_table_reinsert(hash_table, buckets[i]);
-
-	free(buckets);
+			hash_table_insert(new_hash_table, bucket);
 }
 
 void hash_table_insert(hash_table_t* hash_table, bucket_t* bucket) {
-	size_t cell_index = blob_hash(bucket->key) % hash_table->capacity;
-
-	cell_insert(&hash_table->cells[cell_index], bucket);
+	size_t cell_index = hash(hash_table, bucket->key);
 
 	bucket->cell_index = cell_index;
 
-	hash_table->size++;
+	cell_t* cell = &hash_table->cells[cell_index];
 
-	if (hash_table->size / (double) hash_table->capacity > LOAD_FACTOR)
-		hash_table_expand(hash_table);
+	cell_lock(cell);
+
+	cell_insert(cell, bucket);
+
+	cell_unlock(cell);
+
+	counter_increment(&hash_table->size);
 }
 
 bucket_t* hash_table_lookup(hash_table_t* hash_table, blob_t key) {
-	size_t cell_index = blob_hash(key) % hash_table->capacity;
+	cell_t* cell = hashed_cell(hash_table, key);
 
-	return cell_find(&hash_table->cells[cell_index], key);
+	cell_lock(cell);
+
+	bucket_t* bucket = cell_find(cell, key);
+
+	cell_unlock(cell);
+
+	return bucket;
 }
 
 void hash_table_delete_bucket(hash_table_t* hash_table, bucket_t* bucket) {
-	hash_table->size--;
+	counter_decrement(&hash_table->size);
 
-	cell_delete_bucket(&hash_table->cells[bucket->cell_index], bucket);
+	cell_t* cell = &hash_table->cells[bucket->cell_index];
+
+	cell_lock(cell);
+
+	cell_delete_bucket(cell, bucket);
+
+	cell_unlock(cell);
 }
 
 bucket_t* hash_table_delete(hash_table_t* hash_table, blob_t key) {
-	size_t cell_index = blob_hash(key) % hash_table->capacity;
+	cell_t* cell = hashed_cell(hash_table, key);
 
-	bucket_t* bucket = cell_find(&hash_table->cells[cell_index], key);
-	 
-	if (bucket)
-		hash_table_delete_bucket(hash_table, bucket);
+	cell_lock(cell);
+
+	bucket_t* bucket = cell_find(cell, key);
+
+	if (bucket) {
+		counter_decrement(&hash_table->size);
+
+		cell_delete_bucket(cell, bucket);
+	}
+
+	cell_unlock(cell);
 
 	return bucket;
 }

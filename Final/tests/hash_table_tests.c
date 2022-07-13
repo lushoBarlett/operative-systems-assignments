@@ -6,10 +6,10 @@
 #include "../src/hash_table.h"
 #include "test_utils.h"
 
-static hash_table_t init() {
+static hash_table_t init(size_t capacity) {
 	hash_table_t hash_table;
 
-	hash_table_init(&hash_table);
+	hash_table_init(&hash_table, hash_table_cells(capacity), capacity);
 
 	return hash_table;
 }
@@ -23,7 +23,7 @@ static void free_all(hash_table_t* hash_table) {
 }
 
 static void empty_cell_is_null() {
-	hash_table_t hash_table = init();
+	hash_table_t hash_table = init(INITIAL_CAPACITY);
 
 	blob_t key = blob_empty();
 
@@ -33,7 +33,7 @@ static void empty_cell_is_null() {
 }
 
 static void find_returns_inserted_value() {
-	hash_table_t hash_table = init();
+	hash_table_t hash_table = init(INITIAL_CAPACITY);
 
 	blob_t key = blob_from_string("key");
 	blob_t value = blob_from_string("value");
@@ -50,7 +50,7 @@ static void find_returns_inserted_value() {
 }
 
 static void delete_removes_value() {
-	hash_table_t hash_table = init();
+	hash_table_t hash_table = init(INITIAL_CAPACITY);
 
 	blob_t key = blob_from_string("key");
 	blob_t value = blob_from_string("value");
@@ -69,7 +69,7 @@ static void delete_removes_value() {
 }
 
 static void find_among_many() {
-	hash_table_t hash_table = init();
+	hash_table_t hash_table = init(INITIAL_CAPACITY);
 
 	blob_t key1 = blob_from_string("key1");
 	blob_t key2 = blob_from_string("key2");
@@ -99,7 +99,7 @@ static void find_among_many() {
 }
 
 static void intensive_work() {
-	hash_table_t hash_table = init();
+	hash_table_t hash_table = init(INITIAL_CAPACITY);
 
 	char string[] = "\0";
 
@@ -115,7 +115,7 @@ static void intensive_work() {
 		hash_table_insert(&hash_table, bucket_create(keys[i], values[i]));
 	}
 
-	assert(hash_table.size == 256);
+	assert(counter_get(&hash_table.size) == 256);
 
 	for (size_t i = 0; i < 256; i++) {
 		bucket_t* found = hash_table_lookup(&hash_table, keys[i]);
@@ -128,10 +128,12 @@ static void intensive_work() {
 	for (size_t i = 0; i < 256; i++)
 		bucket_dereference(hash_table_delete(&hash_table, keys[i]));
 
-	assert(hash_table.size == 0);
+	assert(counter_get(&hash_table.size) == 0);
 
 	free_all(&hash_table);
 }
+
+// TODO: test moves
 
 void hash_table_tests() {
 	TEST_SUITE(hash_table);
