@@ -27,4 +27,4 @@ void cell_delete_bucket(cell_t* cell, bucket_t* bucket);
 
 bucket_t* cell_delete(cell_t* cell, blob_t key);
 
-bucket_t* cell_insert(cell_t* cell, bucket_t* bucket);
+void cell_insert(cell_t* cell, bucket_t* bucket);

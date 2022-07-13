@@ -58,10 +58,10 @@ static void hash_table_expand(hash_table_t* hash_table) {
 	free(buckets);
 }
 
-bucket_t* hash_table_insert(hash_table_t* hash_table, bucket_t* bucket) {
+void hash_table_insert(hash_table_t* hash_table, bucket_t* bucket) {
 	size_t cell_index = blob_hash(bucket->key) % hash_table->capacity;
 
-	bucket_t* old = cell_insert(&hash_table->cells[cell_index], bucket);
+	cell_insert(&hash_table->cells[cell_index], bucket);
 
 	bucket->cell_index = cell_index;
 
@@ -69,8 +69,6 @@ bucket_t* hash_table_insert(hash_table_t* hash_table, bucket_t* bucket) {
 
 	if (hash_table->size / (double) hash_table->capacity > LOAD_FACTOR)
 		hash_table_expand(hash_table);
-
-	return old;
 }
 
 bucket_t* hash_table_lookup(hash_table_t* hash_table, blob_t key) {
