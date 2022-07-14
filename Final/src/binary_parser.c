@@ -7,6 +7,7 @@
 #include "binary_parser.h"
 
 enum code {
+	NOTHING = 0,
 	PUT = 11,
 	DEL = 12,
 	GET = 13,
@@ -22,56 +23,62 @@ enum code {
 	EUNK = 115,
 };
 
-static int read_n(struct state_machine* sm, unsigned char* dest, int n, int fd) {
-	int ret;
-	int rc = read(fd, dest + sm->rc, n - sm->rc);
-	if (rc < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
-		return 0;
-	}
-	if (rc < 0) {
-		printf("error! %s\n", strerror(errno));
-	}
-	sm->rc += rc;
-	ret = sm->rc == n;
+static int check_finished(state_machine_t* state_machine, int n) {
+	int finished = state_machine->read_characters == n;
 
-	if (ret)
-		sm->rc = 0;
-
-	return ret;
-}
-
-static int get_len(struct state_machine* sm, int* len, int fd) {
-	int ret = read_n(sm, sm->buf, 4, fd);
-	if (!ret)
-		return 0;
-
-	*len = ntohl(*(int*)(sm->buf));
+	if (finished)
+		state_machine->read_characters = 0;
 	
-	return 1;
+	return finished;
 }
 
-static int get_key_val(struct state_machine* sm, unsigned char* dest, int dest_len, int fd) {
-	return read_n(sm, dest, dest_len, fd);
+static int read_n(state_machine_t* state_machine, uint8_t* dest, int n) {
+
+	uint8_t current_dest = dest + state_machine->read_characters;
+
+	uint8_t bytes_left = n - state_machine->read_characters;
+
+	int current_read = read(state_machine->file_descriptor, current_dest, bytes_left);
+
+	if (current_read < 0 && (errno == EAGAIN || errno == EWOULDBLOCK))
+		return 0;
+
+	if (current_read < 0)
+		printf("error! %s\n", strerror(errno));
+
+	state_machine->read_characters += current_read;
+
+	return check_finished(state_machine, n);
 }
 
-static int parse_comm(struct state_machine* sm, unsigned char** buf, int fd) {
-	int success;
+static int get_len(state_machine_t* state_machine) {
+	int finished = read_n(state_machine, &state_machine->arg_len, 4);
 
-	if (sm->arg_len == 0) {
-		success = get_len(sm, &sm->arg_len, fd);
+	if (finished)
+		state_machine->arg_len = ntohl(state_machine->arg_len);
+	
+	return finished;
+}
 
-		if (!success)
+// TODO: further divide
+static int parse_comm(state_machine_t* state_machine, uint8_t** buf) {
+	int finished;
+
+	if (state_machine->state == ReadingKeyLength || state_machine->state == ReadingValueLength) {
+		finished = get_len(state_machine);
+
+		if (!finished)
 			return 0;
 
-		*buf = malloc(sm->arg_len);
+		*buf = malloc(state_machine->arg_len);
 	}
 
-	success = get_key_val(sm, *buf, sm->arg_len, fd);
+	finished = read_n(state_machine, *buf, state_machine->arg_len);
 
-	if (success)
-		sm->arg_len = 0;
+	if (finished)
+		state_machine->state; // TODO: = new_state
 
-	return success;
+	return finished;
 }
 
 void require_put() {
@@ -94,92 +101,93 @@ void require_stats() {
 	printf("requiring stats...\n");
 }
 
-void sm_can_read(struct state_machine* sm, int fd) {
-	sm->next(sm, fd);
+void state_machine_advance(state_machine_t* state_machine) {
+	switch (state_machine->code) {
+	case PUT:
+		handle_put(state_machine);
+		break;
+	case GET:
+		handle_get(state_machine);
+		break;
+	case DEL:
+		handle_del(state_machine);
+		break;
+	case TAKE:
+		handle_take(state_machine);
+		break;
+	case STATS:
+		handle_stats(state_machine);
+		break;
+	case NOTHING:
+		handle_nothing(state_machine);
+		break;
+	default:
+		// TODO: handle error, maybe remove "nothing" and always handle nothing
+		assert(0);
+	}
 }
 
-void handle_nothing(struct state_machine* sm, int fd) {
+void handle_nothing(state_machine_t* state_machine) {
+	uint8_t code;
 
-	unsigned char code[1];
-	int success = read_n(sm, code, 1, fd);
+	// TODO the succes and return pattern may be extracted to a macro
+	int success = read_n(state_machine, &code, 1);
+	
 	if (!success)
 		return;
 
-	switch (*code) {
-	case PUT:
-		sm->next = handle_put;
-		break;
-	case GET:
-		sm->next = handle_get;
-		break;
-	case DEL:
-		sm->next = handle_del;
-		break;
-	case TAKE:
-		sm->next = handle_take;
-		break;
-	case STATS:
-		sm->next = handle_stats;
-		break;
-	default:
-		sm->next = handle_nothing;
-	}
-	
-	sm->next(sm, fd);
+	state_machine->code = code;
+
+	state_machine_advance(state_machine);
 }
 
-static void handle_comm_uniarg(struct state_machine* sm, int fd, void (*f)()) {
-	int success = parse_comm(sm, &sm->key, fd);
+static void handle_comm_uniarg(state_machine_t* state_machine, void (*f)()) {
+	int success = parse_comm(state_machine, &state_machine->key);
 	if (!success)
 		return;
 	f();
-	handle_nothing(sm, fd);
+	handle_nothing(state_machine);
 }
 
-void handle_put(struct state_machine* sm, int fd) {
-	if (sm->ist == Key) {
-		int success = parse_comm(sm, &sm->key, fd);
+void handle_put(state_machine_t* state_machine) {
+	if (state_machine->state == ReadingKey) {
+		int success = parse_comm(state_machine, &state_machine->key);
+
 		if (!success)
 			return;
-		sm->ist = Val;
+
+		state_machine->state; // TODO: new_state
 	}
 
-	int success = parse_comm(sm, &sm->value, fd);
+	int success = parse_comm(state_machine, &state_machine->value);
+
 	if (!success)
 		return;
 
 	require_put();
-	handle_nothing(sm, fd);
+	handle_nothing(state_machine);
 }
 
-void handle_get(struct state_machine* sm, int fd) {
-	handle_comm_uniarg(sm, fd, require_get);
+void handle_get(state_machine_t* state_machine) {
+	handle_comm_uniarg(state_machine, require_get);
 }
 
-void handle_del(struct state_machine* sm, int fd) {
-	handle_comm_uniarg(sm, fd, require_del);
+void handle_del(state_machine_t* state_machine) {
+	handle_comm_uniarg(state_machine, require_del);
 }
 
-void handle_take(struct state_machine* sm, int fd) {
-	handle_comm_uniarg(sm, fd, require_take);
+void handle_take(state_machine_t* state_machine) {
+	handle_comm_uniarg(state_machine, require_take);
 }
 
-void handle_stats(struct state_machine* sm, int fd) {
+void handle_stats(state_machine_t* state_machine) {
 	require_stats();
-	handle_nothing(sm, fd);
+	handle_nothing(state_machine);
 }
 
-struct state_machine* sm_init() {
-	struct state_machine* sm = malloc(sizeof(struct state_machine));
-	sm->next = handle_nothing;
-	sm->ist = Key;
-	sm->buf = malloc(sizeof(char)*4);
-	sm->key = sm->value = NULL;
-	sm->rc = sm->arg_len = 0;
-	return sm;
-}
-
-void sm_destroy(struct state_machine* sm) {
-	free(sm->buf);
-	free(sm);
+void state_machine_init(state_machine_t* state_machine) {
+	state_machine->code = NOTHING;
+	state_machine->state = ReadingKeyLength;
+	state_machine->key = state_machine->value = NULL;
+	state_machine->read_characters = state_machine->arg_len = 0;
 }

@@ -1,33 +1,37 @@
 #pragma once
 
 typedef enum {
-	Key, Val, 
-} Internal_state;
+	ReadingKeyLength,
+	ReadingKey,
+	ReadingValueLength,
+	ReadingValue,
+} IntentalState;
 
-struct state_machine {
-	void (*next)(struct state_machine* sm, int fd);
-	Internal_state ist;
-	unsigned char* buf;
-	unsigned char* key;
-	unsigned char* value;
-	int rc;
-	int arg_len;
-};
+typedef struct state_machine_t {
+	enum code code;
+	IntentalState state;
 
-void handle_nothing(struct state_machine* sm, int fd);
+	uint32_t arg_len;
+	uint8_t* key;
+	uint8_t* value;
 
-void handle_put(struct state_machine* sm, int fd);
+	int read_characters;
 
-void handle_get(struct state_machine* sm, int fd);
+	int file_descriptor;
+} state_machine_t;
 
-void handle_del(struct state_machine* sm, int fd);
+void state_machine_init(state_machine_t* state_machine);
 
-void handle_take(struct state_machine* sm, int fd);
+void handle_nothing(state_machine_t* state_machine);
 
-void handle_stats(struct state_machine* sm, int fd);
+void handle_put(state_machine_t* state_machine);
 
-void sm_can_read(struct state_machine* sm, int fd); 
+void handle_get(state_machine_t* state_machine);
 
-struct state_machine* sm_init();
+void handle_del(state_machine_t* state_machine);
 
-void sm_destroy(struct state_machine* sm);
+void handle_take(state_machine_t* state_machine);
+
+void handle_stats(state_machine_t* state_machine);
+
+void state_machine_advance(state_machine_t* state_machine); 

@@ -39,13 +39,13 @@ typedef enum {
 	BINARY, TEXT,
 } Cli_type;
 
-struct fdinfo {
+typedef struct fdinfo {
 	Cli_type cli_type;
 	Sock_type sock_type;
 	int fd;
-	struct state_machine* sm;
+	state_machine_t state_machine;
 	buf_t* buf;
-};
+} fdinfo ;
 
 void quit(const char* error_message);
 
