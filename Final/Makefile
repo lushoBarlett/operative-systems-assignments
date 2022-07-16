@@ -14,16 +14,14 @@ CORE := \
 	record \
 	lru_queue \
 	bucket \
-	cell \
-	hash_table
+	cell
 
 TEST := \
 	blob \
 	counter64 \
 	lru_queue \
 	bucket \
-	cell \
-	hash_table
+	cell
 
 OBJECTS := $(CORE:%=$(BUILD)/%.o)
 
