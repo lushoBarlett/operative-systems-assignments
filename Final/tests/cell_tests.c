@@ -109,7 +109,7 @@ static void reinsert_same_key() {
 	for (size_t reps = 0; reps < 10000; reps++) {
 		bucket_t* bucket = bucket_from_strings("key", "value");
 		
-		cell_insert(&cell, bucket);
+		bucket_try_dereference(cell_insert(&cell, bucket));
 		
 		bucket_t* found = find_from_string(&cell, "key");
 		
@@ -130,7 +130,7 @@ struct common_args {
 
 static void atomic_insert(cell_t* cell, bucket_t* bucket) {
 	cell_lock(cell);
-	cell_insert(cell, bucket);
+	bucket_try_dereference(cell_insert(cell, bucket));
 	cell_unlock(cell);
 }
 

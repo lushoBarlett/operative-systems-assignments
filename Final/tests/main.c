@@ -3,6 +3,7 @@
 #include "counter64_tests.h"
 #include "lru_queue_tests.h"
 #include "cell_tests.h"
+#include "database_tests.h"
 
 int main() {
 	blob_tests();
@@ -10,4 +11,5 @@ int main() {
 	counter64_tests();
 	lru_queue_tests();
 	cell_tests();
+	database_tests();
 }
