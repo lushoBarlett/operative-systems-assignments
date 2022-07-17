@@ -16,6 +16,7 @@ CORE := \
 	bucket \
 	cell \
 	database \
+	rw_lock
 
 TEST := \
 	blob \
