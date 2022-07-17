@@ -3,6 +3,8 @@
 #include <assert.h>
 #include <time.h>
 #include <stdlib.h>
+#include <sys/time.h>
+#include <sys/resource.h>
 
 #include "../src/database.h"
 #include "test_utils.h"
@@ -128,9 +130,7 @@ static void get_after_reinsertion_returs_the_second_value() {
 	database_destroy(&database);
 }
 
-static blob_t random_blob() {
-	uint64_t* memory = malloc(sizeof(*memory));
-
+static blob_t make_random_blob_from(uint64_t* memory) {
 	*memory = rand();
 	*memory = *memory << 32 | rand();
 
@@ -138,6 +138,10 @@ static blob_t random_blob() {
 		.memory = memory,
 		.bytes = 8,
 	};
+}
+
+static blob_t random_blob() {
+	return make_random_blob_from(malloc(sizeof(uint64_t)));
 }
 
 static void should_expand_along_with_insertions() {
@@ -152,6 +156,49 @@ static void should_expand_along_with_insertions() {
 	database_destroy(&database);
 }
 
+static blob_t database_memsafe_random_blob(database_t* database) {
+	return make_random_blob_from(database_memsafe_malloc(database, sizeof(uint64_t)));
+}
+
+static bucket_t* database_memsafe_bucket_create(database_t* database, blob_t key, blob_t value) {
+	bucket_t* bucket = database_memsafe_malloc(database, sizeof(bucket_t));
+
+	bucket_init(bucket, key, value);
+
+	return bucket;
+}
+
+static void database_releases_memory_when_needed() {
+	struct rlimit restore;
+	getrlimit(RLIMIT_AS, &restore);
+
+	size_t bytes =
+		sizeof(cell_t) +
+		sizeof(bucket_t) +
+		2 * sizeof(uint64_t);
+
+	struct rlimit newlimit = {
+		.rlim_cur = bytes,
+		.rlim_max = bytes,
+	};
+	setrlimit(RLIMIT_AS, &newlimit);
+
+	database_t database = init();
+
+	for (size_t i = 0; i < 10000; i++) {
+		blob_t key = database_memsafe_random_blob(&database);
+		blob_t value = database_memsafe_random_blob(&database);
+
+		bucket_t* bucket = database_memsafe_bucket_create(&database, key, value);
+
+		database_put(&database, bucket);
+	}
+
+	database_destroy(&database);
+
+	setrlimit(RLIMIT_AS, &restore);
+}
+
 void database_tests() {
 	srand(time(NULL));
 
@@ -164,4 +211,5 @@ void database_tests() {
 	TEST(get_after_delete_returns_null());
 	TEST(get_after_reinsertion_returs_the_second_value());
 	TEST(should_expand_along_with_insertions());
+	TEST(database_releases_memory_when_needed());
 }

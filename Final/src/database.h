@@ -36,4 +36,6 @@ void database_delete(database_t* database, blob_t key);
 
 record_t database_stats(database_t* database);
 
+void* database_memsafe_malloc(database_t* database, size_t bytes);
+
 void database_destroy(database_t* database);

@@ -222,6 +222,30 @@ static void free_one_bucket(database_t* database) {
 	counter_decrement(&database->size);
 }
 
+void* database_memsafe_malloc(database_t* database, size_t bytes) {
+	void* memory;
+
+	while ((memory = malloc(bytes)) == NULL) {
+		bucket_t* bucket = lru_queue_dequeue(&database->lru_queue);
+
+		read_lock(&database->rw_cells_lock);
+
+		cell_t* cell = &database->cells[bucket->cell_index];
+
+		cell_lock(cell);
+
+		cell_delete_bucket(cell, bucket);
+
+		cell_unlock(cell);
+
+		read_unlock(&database->rw_cells_lock);
+
+		bucket_dereference(bucket);
+	}
+	
+	return memory;
+}
+
 void database_destroy(database_t* database) {
 	write_lock(&database->rw_cells_lock);
 

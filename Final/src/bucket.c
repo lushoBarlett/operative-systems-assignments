@@ -6,14 +6,18 @@
 bucket_t* bucket_create(blob_t key, blob_t value) {
 	bucket_t* bucket = malloc(sizeof(bucket_t));
 
+	bucket_init(bucket, key, value);
+
+	return bucket;
+}
+
+void bucket_init(bucket_t* bucket, blob_t key, blob_t value) {
 	memset(bucket, 0, sizeof(bucket_t));
 
 	bucket->key = key;
 	bucket->value = value;
 
 	counter_init(&bucket->references, 1);
-
-	return bucket;
 }
 
 void bucket_reference(bucket_t* bucket) {
