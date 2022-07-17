@@ -18,7 +18,7 @@ typedef struct {
 	pthread_mutex_t capacity_lock;
 
 	cell_t* cells;
-	readers_writer_lock_t rw_cells_lock;
+	rw_lock_t rw_cells_lock;
 
 	lru_queue_t lru_queue;
 	concurrent_record_t record;
