@@ -10,6 +10,7 @@
 #include <unistd.h>
 #include <sys/epoll.h>
 #include "text_parser.h"
+#include "binary_parser.h"
 
 #define MAX_MSG_SIZE 2048
 
@@ -17,19 +18,6 @@
  * Constantes usadas por el protocolo
  * de comunicación del servidor de memcached
  */
-enum Protocol {
-	PUT = 11,
-	DEL = 12,
-	GET = 13,
-	TAKE = 14,
-	STATS = 21,
-	OK = 101,
-	EINVAL = 111,
-	ENOTFOUND = 112,
-	EBINARY = 113,
-	EBIG = 114,
-	EUNK = 115,
-};
 
 typedef enum {
 	LSOCK, CLIENT,
@@ -43,8 +31,8 @@ typedef struct fdinfo {
 	Cli_type cli_type;
 	Sock_type sock_type;
 	int fd;
-	state_machine_t state_machine;
-	buf_t* buf;
+	bin_state_machine_t bin_state_machine;
+	txt_state_machine_t txt_state_machine;
 } fdinfo ;
 
 void quit(const char* error_message);

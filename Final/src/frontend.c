@@ -1,3 +1,4 @@
+#include "database.h"
 #include "frontend.h"
 #include "text_parser.h"
 #include "binary_parser.h"
@@ -85,9 +86,9 @@ int poll_socket(int socket, int epfd, Sock_type sock_type, Cli_type cli_type) {
 	fdinfo->fd = socket;
 	if (sock_type == CLIENT) {
 		if (cli_type == BINARY)
-			state_machine_init(&fdinfo->state_machine);
+			state_machine_init(&fdinfo->bin_state_machine, fdinfo->fd);
 		if (cli_type == TEXT)
-			fdinfo->buf = buf_create(MAX_MSG_SIZE);
+			txt_state_machine_init(&fdinfo->txt_state_machine, fdinfo->fd);
 	}
 
 	struct epoll_event ev;
@@ -113,8 +114,6 @@ void require_poll_socket(int socket, int epfd, Cli_type type) {
 void kill_cli(int epfd, struct fdinfo* fdinfo){
 	epoll_ctl(epfd, EPOLL_CTL_DEL, fdinfo->fd, NULL);
 	close(fdinfo->fd);
-	if (fdinfo->cli_type != BINARY)
-		buf_destroy(fdinfo->buf);
 	free(fdinfo);
 }
 
@@ -146,10 +145,10 @@ void handle_event(int epfd, struct epoll_event event) {
 
 		if (event.events & EPOLLIN) {
 			if (fdinfo->cli_type == TEXT)
-				buf_can_read(fdinfo->buf, fdinfo->fd);
+				can_read_txt(&fdinfo->txt_state_machine);
 
 			if (fdinfo->cli_type == BINARY)
-				state_machine_advance(&fdinfo->state_machine);
+				state_machine_advance(&fdinfo->bin_state_machine);
 		}
 
 		repoll_socket(fdinfo, epfd, CLIENT);
