@@ -6,24 +6,7 @@
 #include <arpa/inet.h>
 #include "binary_parser.h"
 
-enum code {
-	NOTHING = 0,
-	PUT = 11,
-	DEL = 12,
-	GET = 13,
-	TAKE = 14,
-
-	STATS = 21,
-
-	OK = 101,
-	EINVALID = 111,
-	ENOTFOUND = 112,
-	EBINARY = 113,
-	EBIG = 114,
-	EUNK = 115,
-};
-
-static int check_finished(state_machine_t* state_machine, int n) {
+static int check_finished(bin_state_machine_t* state_machine, int n) {
 	int finished = state_machine->read_characters == n;
 
 	if (finished)
@@ -32,51 +15,63 @@ static int check_finished(state_machine_t* state_machine, int n) {
 	return finished;
 }
 
-static int read_n(state_machine_t* state_machine, uint8_t* dest, int n) {
+// Returns 1 if could read all, -1 on error, and 0 if read less
+static int read_n(bin_state_machine_t* state_machine, uint8_t* dest, int n) {
 
-	uint8_t current_dest = dest + state_machine->read_characters;
+	uint8_t* current_dest = dest + state_machine->read_characters;
 
 	uint8_t bytes_left = n - state_machine->read_characters;
 
-	int current_read = read(state_machine->file_descriptor, current_dest, bytes_left);
+	int current_read = read(state_machine->fd, current_dest, bytes_left);
 
 	if (current_read < 0 && (errno == EAGAIN || errno == EWOULDBLOCK))
 		return 0;
 
 	if (current_read < 0)
-		printf("error! %s\n", strerror(errno));
+		return -1;
 
 	state_machine->read_characters += current_read;
 
 	return check_finished(state_machine, n);
 }
 
-static int get_len(state_machine_t* state_machine) {
-	int finished = read_n(state_machine, &state_machine->arg_len, 4);
+static int get_length(bin_state_machine_t* state_machine) {
+	int finished = read_n(state_machine, (uint8_t*) &state_machine->arg_len, 4);
 
-	if (finished)
+	if (finished > 0)
 		state_machine->arg_len = ntohl(state_machine->arg_len);
 	
 	return finished;
 }
 
-// TODO: further divide
-static int parse_comm(state_machine_t* state_machine, uint8_t** buf) {
+static int is_length_state(InternalState state) {
+	return ((state == ReadingKeyLength) || (state == ReadingValueLength));
+}
+
+static InternalState next_state(InternalState state) {
+	if (state == ReadingKeyLength)
+		return ReadingKey;
+	if (state == ReadingValueLength)
+		return ReadingValue;
+	
+	return state;
+}
+
+static int parse_command(bin_state_machine_t* state_machine, uint8_t** buf) {
 	int finished;
 
-	if (state_machine->state == ReadingKeyLength || state_machine->state == ReadingValueLength) {
-		finished = get_len(state_machine);
+	if (is_length_state(state_machine->state)) {
+		finished = get_length(state_machine);
 
-		if (!finished)
-			return 0;
+		if (finished != 1)
+			return finished;
 
 		*buf = malloc(state_machine->arg_len);
+
+		state_machine->state = next_state(state_machine->state);
 	}
 
-	finished = read_n(state_machine, *buf, state_machine->arg_len);
-
-	if (finished)
-		state_machine->state; // TODO: = new_state
+	finished = read_n(state_machine, *buf, state_machine->arg_len);	
 
 	return finished;
 }
@@ -101,93 +96,97 @@ void require_stats() {
 	printf("requiring stats...\n");
 }
 
-void state_machine_advance(state_machine_t* state_machine) {
+int state_machine_advance(bin_state_machine_t* state_machine) {
+	int ret = 1;
+
 	switch (state_machine->code) {
 	case PUT:
-		handle_put(state_machine);
+		ret = handle_put(state_machine);
 		break;
 	case GET:
-		handle_get(state_machine);
+		ret = handle_get(state_machine);
 		break;
 	case DEL:
-		handle_del(state_machine);
+		ret = handle_del(state_machine);
 		break;
 	case TAKE:
-		handle_take(state_machine);
+		ret = handle_take(state_machine);
 		break;
 	case STATS:
 		handle_stats(state_machine);
 		break;
-	case NOTHING:
-		handle_nothing(state_machine);
-		break;
-	default:
-		// TODO: handle error, maybe remove "nothing" and always handle nothing
-		assert(0);
 	}
+
+	if (ret > 0)
+		ret = handle_nothing(state_machine);
+
+	return ret;
 }
 
-void handle_nothing(state_machine_t* state_machine) {
+int handle_nothing(bin_state_machine_t* state_machine) {
 	uint8_t code;
 
-	// TODO the succes and return pattern may be extracted to a macro
+	// TODO the success and return pattern may be extracted to a macro
 	int success = read_n(state_machine, &code, 1);
 	
-	if (!success)
-		return;
+	if (success != 1)
+		return success;
 
 	state_machine->code = code;
 
-	state_machine_advance(state_machine);
+	return state_machine_advance(state_machine);
 }
 
-static void handle_comm_uniarg(state_machine_t* state_machine, void (*f)()) {
-	int success = parse_comm(state_machine, &state_machine->key);
-	if (!success)
-		return;
+static int handle_one_argument_command(bin_state_machine_t* state_machine, void (*f)()) {
+	int success = parse_command(state_machine, &state_machine->key);
+	if (success != 1)
+		return success;
 	f();
-	handle_nothing(state_machine);
+	return success;
 }
 
-void handle_put(state_machine_t* state_machine) {
-	if (state_machine->state == ReadingKey) {
-		int success = parse_comm(state_machine, &state_machine->key);
+static int is_key_state(InternalState state) {
+	return ((state == ReadingKeyLength) || (state == ReadingKey));
+}
 
-		if (!success)
-			return;
+int handle_put(bin_state_machine_t* state_machine) {
+	if (is_key_state(state_machine->state)) {
+		int success = parse_command(state_machine, &state_machine->key);
 
-		state_machine->state; // TODO: new_state
+		if (success != 1)
+			return success;
+
+		state_machine->state = ReadingValueLength;
 	}
 
-	int success = parse_comm(state_machine, &state_machine->value);
+	int success = parse_command(state_machine, &state_machine->value);
 
-	if (!success)
-		return;
+	if (success > 0)
+		require_put();
 
-	require_put();
-	handle_nothing(state_machine);
+	return success;
 }
 
-void handle_get(state_machine_t* state_machine) {
-	handle_comm_uniarg(state_machine, require_get);
+int handle_get(bin_state_machine_t* state_machine) {
+	return handle_one_argument_command(state_machine, require_get);
 }
 
-void handle_del(state_machine_t* state_machine) {
-	handle_comm_uniarg(state_machine, require_del);
+int handle_del(bin_state_machine_t* state_machine) {
+	return handle_one_argument_command(state_machine, require_del);
 }
 
-void handle_take(state_machine_t* state_machine) {
-	handle_comm_uniarg(state_machine, require_take);
+int handle_take(bin_state_machine_t* state_machine) {
+	return handle_one_argument_command(state_machine, require_take);
 }
 
-void handle_stats(state_machine_t* state_machine) {
+void handle_stats(bin_state_machine_t* state_machine) {
 	require_stats();
-	handle_nothing(state_machine);
 }
 
-void state_machine_init(state_machine_t* state_machine) {
+void state_machine_init(bin_state_machine_t* state_machine, int fd) {
 	state_machine->code = NOTHING;
 	state_machine->state = ReadingKeyLength;
 	state_machine->key = state_machine->value = NULL;
 	state_machine->read_characters = state_machine->arg_len = 0;
+	state_machine->fd = fd;
 }

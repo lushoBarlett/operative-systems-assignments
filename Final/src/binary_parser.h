@@ -1,15 +1,29 @@
 #pragma once
 
+enum code {
+	PUT = 11,
+	DEL = 12,
+	GET = 13,
+	TAKE = 14,
+	STATS = 21,
+	OK = 101,
+	EINVAL = 111,
+	ENOTFOUND = 112,
+	EBINARY = 113,
+	EBIG = 114,
+	EUNK = 115,
+};
+
 typedef enum {
 	ReadingKeyLength,
 	ReadingKey,
 	ReadingValueLength,
 	ReadingValue,
-} IntentalState;
+} InternalState;
 
-typedef struct state_machine_t {
+typedef struct bin_state_machine_t {
 	enum code code;
-	IntentalState state;
+	InternalState state;
 
 	uint32_t arg_len;
 	uint8_t* key;
@@ -17,21 +31,21 @@ typedef struct state_machine_t {
 
 	int read_characters;
 
-	int file_descriptor;
-} state_machine_t;
+	int fd;
+} bin_state_machine_t;
 
-void state_machine_init(state_machine_t* state_machine);
+void state_machine_init(bin_state_machine_t* state_machine, int fd);
 
-void handle_nothing(state_machine_t* state_machine);
+int handle_nothing(bin_state_machine_t* state_machine);
 
-void handle_put(state_machine_t* state_machine);
+int handle_put(bin_state_machine_t* state_machine);
 
-void handle_get(state_machine_t* state_machine);
+int handle_get(bin_state_machine_t* state_machine);
 
-void handle_del(state_machine_t* state_machine);
+int handle_del(bin_state_machine_t* state_machine);
 
-void handle_take(state_machine_t* state_machine);
+int handle_take(bin_state_machine_t* state_machine);
 
-void handle_stats(state_machine_t* state_machine);
+void handle_stats(bin_state_machine_t* state_machine);
 
-void state_machine_advance(state_machine_t* state_machine); 
+int state_machine_advance(bin_state_machine_t* state_machine); 
