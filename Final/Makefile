@@ -15,7 +15,8 @@ CORE := \
 	lru_queue \
 	bucket \
 	cell \
-	hash_table
+	rw_lock \
+	database
 
 TEST := \
 	blob \
@@ -23,7 +24,8 @@ TEST := \
 	lru_queue \
 	bucket \
 	cell \
-	hash_table
+	rw_lock \
+	database
 
 OBJECTS := $(CORE:%=$(BUILD)/%.o)
 

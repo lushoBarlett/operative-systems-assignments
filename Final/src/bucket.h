@@ -66,6 +66,8 @@ typedef struct bucket_t {
 
 bucket_t* bucket_create(blob_t key, blob_t value);
 
+void bucket_init(bucket_t* bucket, blob_t key, blob_t value);
+
 void bucket_reference(bucket_t* bucket);
 
 void bucket_dereference(bucket_t* bucket);

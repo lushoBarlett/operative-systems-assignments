@@ -48,11 +48,8 @@ bucket_t* cell_delete(cell_t* cell, blob_t key) {
 	return bucket;
 }
 
-void cell_insert(cell_t* cell, bucket_t* bucket) {
+bucket_t* cell_insert(cell_t* cell, bucket_t* bucket) {
 	bucket_t* old = cell_delete(cell, bucket->key);
-
-	if (old)
-		bucket_dereference(old);
 
 	if (cell->bucket)
 		cell->bucket->prev_value = bucket;
@@ -60,4 +57,6 @@ void cell_insert(cell_t* cell, bucket_t* bucket) {
 	bucket->next_value = cell->bucket;
 
 	cell->bucket = bucket;
+
+	return old;
 }
