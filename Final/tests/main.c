@@ -7,11 +7,15 @@
 #include "database_tests.h"
 
 int main() {
+	/*
+	 * Corridos primero para probar los límites de memoria
+	 */
+	database_tests();
+
 	blob_tests();
 	bucket_tests();
 	counter64_tests();
 	lru_queue_tests();
 	cell_tests();
 	rw_lock_tests();
-	database_tests();
 }

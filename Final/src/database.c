@@ -5,6 +5,34 @@
 #define INITIAL_CAPACITY 37
 #define LOAD_FACTOR 0.75
 
+#include <stdio.h>
+#include <assert.h>
+
+static void free_one_bucket(database_t* database) {
+	bucket_t* bucket = lru_queue_dequeue(&database->lru_queue);
+
+	cell_t* cell = &database->cells[bucket->cell_index];
+
+	cell_lock(cell);
+
+	cell_delete_bucket(cell, bucket);
+
+	cell_unlock(cell);
+
+	bucket_dereference(bucket);
+
+	counter_decrement(&database->size);
+}
+
+static void* database_memsafe_realloc(database_t* database, void* previous, size_t bytes) {
+	void* memory;
+
+	while ((memory = realloc(previous, bytes)) == NULL)
+		free_one_bucket(database);
+	
+	return memory;
+}
+
 static void cells_init(database_t* database) {
 	for (size_t i = 0; i < database->capacity; i++)
 		cell_init(&database->cells[i]);
@@ -41,7 +69,7 @@ static int should_expand(database_t* database, size_t new_size) {
 }
 
 static bucket_t** buckets_dump(database_t* database, size_t size) {
-	bucket_t** buckets = malloc(sizeof(*buckets) * size);
+	bucket_t** buckets = database_memsafe_malloc(database, sizeof(*buckets) * size);
 	size_t bucket_index = 0;
 
 	for (size_t i = 0; i < database->capacity; i++) {
@@ -86,7 +114,8 @@ static void expand(database_t* database) {
 
 	database->capacity *= 2;
 
-	database->cells = realloc(database->cells, sizeof(cell_t) * database->capacity);
+	database->cells = database_memsafe_realloc(
+		database, database->cells, sizeof(cell_t) * database->capacity);
 
 	// TODO: what do with reinit of cell locks?
 	cells_init(database);
@@ -206,44 +235,8 @@ record_t databases_stats(database_t* database) {
 	return report(&database->record);
 }
 
-static void free_one_bucket(database_t* database) {
-	bucket_t* bucket = lru_queue_dequeue(&database->lru_queue);
-
-	cell_t* cell = hashed_cell(database, bucket->key);
-
-	cell_lock(cell);
-
-	cell_delete_bucket(cell, bucket);
-
-	cell_unlock(cell);
-
-	bucket_dereference(bucket);
-
-	counter_decrement(&database->size);
-}
-
 void* database_memsafe_malloc(database_t* database, size_t bytes) {
-	void* memory;
-
-	while ((memory = malloc(bytes)) == NULL) {
-		bucket_t* bucket = lru_queue_dequeue(&database->lru_queue);
-
-		read_lock(&database->rw_cells_lock);
-
-		cell_t* cell = &database->cells[bucket->cell_index];
-
-		cell_lock(cell);
-
-		cell_delete_bucket(cell, bucket);
-
-		cell_unlock(cell);
-
-		read_unlock(&database->rw_cells_lock);
-
-		bucket_dereference(bucket);
-	}
-	
-	return memory;
+	return database_memsafe_realloc(database, NULL, bytes);
 }
 
 void database_destroy(database_t* database) {
