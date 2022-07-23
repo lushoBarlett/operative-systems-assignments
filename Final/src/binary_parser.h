@@ -1,18 +1,7 @@
 #pragma once
 
-enum code {
-	PUT = 11,
-	DEL = 12,
-	GET = 13,
-	TAKE = 14,
-	STATS = 21,
-	OK = 101,
-	EINVAL = 111,
-	ENOTFOUND = 112,
-	EBINARY = 113,
-	EBIG = 114,
-	EUNK = 115,
-};
+#include "code.h"
+#include "database.h"
 
 typedef enum {
 	ReadingKeyLength,
@@ -22,7 +11,7 @@ typedef enum {
 } InternalState;
 
 typedef struct bin_state_machine_t {
-	enum code code;
+	Code code;
 	InternalState state;
 
 	uint32_t arg_len;
@@ -32,9 +21,11 @@ typedef struct bin_state_machine_t {
 	int read_characters;
 
 	int fd;
+
+	database_t* database;
 } bin_state_machine_t;
 
-void state_machine_init(bin_state_machine_t* state_machine, int fd);
+void bin_state_machine_init(bin_state_machine_t* state_machine, int fd, database_t* database);
 
 int handle_nothing(bin_state_machine_t* state_machine);
 
@@ -48,4 +39,4 @@ int handle_take(bin_state_machine_t* state_machine);
 
 void handle_stats(bin_state_machine_t* state_machine);
 
-int state_machine_advance(bin_state_machine_t* state_machine); 
+int bin_state_machine_advance(bin_state_machine_t* state_machine); 

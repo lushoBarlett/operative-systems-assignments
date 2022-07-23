@@ -34,15 +34,6 @@ size_t blob_hash(blob_t blob) {
 	return hash;
 }
 
-char* blob_to_printable(const blob_t* value) {
-	char* memory = (char*) value->memory;
-	for (int i = 0; i < value->bytes; i++) {
-		if (!isprint(memory[i]))
-			memory[i] = '.';
-	}
-	return value->memory;
-}
-
 void blob_free(blob_t blob) {
 	free(blob.memory);
 }

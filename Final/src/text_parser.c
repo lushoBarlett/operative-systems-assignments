@@ -1,3 +1,5 @@
+#include "text_parser.h"
+
 #include <string.h>
 #include <stdlib.h>
 #include <assert.h>
@@ -5,44 +7,54 @@
 #include <errno.h>
 #include <unistd.h>
 #include <ctype.h>
+
 #include "database.h"
-#include "text_parser.h"
 #include "blob.h"
+
 #define MAX_BUF_SIZE 2048
 
-// TODO: dereference buckets returned by db interface
+// TODO: dereference buckets returned by database interface
 // TODO: reply einval when a line isn't valid
 
-void txt_state_machine_init(txt_state_machine_t* state_machine, int fd, database_t* db) {
+void txt_state_machine_init(txt_state_machine_t* state_machine, int fd, database_t* database) {
 	state_machine->read_characters = 0;
 	state_machine->fd = fd;
-	state_machine->db = db;
+	state_machine->database = database;
 }
 
-static void reply_with_code(enum code code, int fd) {
+static void reply_with_code(Code code, int fd) {
 	char response[2] = {code, '\n'};
 
 	write(fd, response, 2);
 }
 
-static void reply_with_blob(const blob_t value, int fd) {
-	char* printable_value = blob_to_printable(&value);
+static void reply_with_blob(blob_t value, int fd) {
+	char response[2048] = { 'O', 'K', ' ' };
 
-	char response[2048];
+	size_t limit = value.bytes <= 2044 ? value.bytes : 2044;
 
-	snprintf(response, 2048, "OK %s\n", printable_value);
+	char* memory = value.memory;
 
-	write(fd, response, value.bytes + 4);
+	size_t i = 2;	
+
+	for (size_t b = 0; b < limit; b++)
+		response[i++] = isprint(memory[b]) ? memory[b] : '.';
+
+	response[i++] = '\n';
+
+	write(fd, response, i);
 }
 
 static int record_to_string(record_t record, char* str, int size) {
-	uint64_t puts = record.puts;
-	uint64_t dels = record.dels;
-	uint64_t gets = record.gets;
-	uint64_t keys = record.keys;
-	uint64_t bytes = record.bytes;
-
-	return snprintf(str, size, "OK PUTS=%ld DELS=%ld GETS=%ld KEYS=%ld BYTES=%ld\n", puts, dels, gets, keys, bytes);
+	return snprintf(
+		str, size,
+		"OK PUTS=%ld DELS=%ld GETS=%ld KEYS=%ld BYTES=%ld\n",
+		record.puts,
+		record.dels,
+		record.gets,
+		record.keys,
+		record.bytes
+	);
 }
 
 static void reply_with_record(record_t record, int fd) {
@@ -51,195 +63,213 @@ static void reply_with_record(record_t record, int fd) {
 	int written_count = record_to_string(record, response, 2048);
 
 	if (written_count >= 2048)
-		reply_with_code(EBIG, fd);
+		reply_with_code(Ebig, fd);
 	else
 		write(fd, response, written_count);
 }
 
-static void require_put(database_t* db, char* key, char* value, int fd) {
-	blob_t key_blob = blob_create(key, sizeof(key));
-	blob_t value_blob = blob_create(value, sizeof(value));
+static void require_put(database_t* database, char* key, char* value, int fd) {
+	blob_t key_blob = {
+		.memory = key,
+		.bytes = strlen(key)
+	};
 
-	db_put(db, &key_blob, &value_blob);
-	reply_with_code(OK, fd);
+	blob_t value_blob = {
+		.memory = value,
+		.bytes = strlen(value)
+	};
+
+	bucket_t* bucket = database_memsafe_malloc(database, sizeof(bucket_t));
+
+	bucket_init(bucket, key_blob, value_blob);
+
+	database_put(database, bucket);
+
+	reply_with_code(Ok, fd);
 }
 
-static void require_get(database_t* db, char* key, int fd) {
-	blob_t key_blob = blob_create(key, sizeof(key));
-	const bucket_t* bucket = db_get(db, &key_blob);
+static void require_get(database_t* database, char* key, int fd) {
+	blob_t key_blob = {
+		.memory = key,
+		.bytes = strlen(key)
+	};
 
-	if (bucket)
+	bucket_t* bucket = database_get(database, key_blob);
+
+	if (bucket) {
 		reply_with_blob(bucket->value, fd);
-	else
-		reply_with_code(ENOTFOUND, fd);
+
+		bucket_dereference(bucket);
+	} else {
+		reply_with_code(Enotfound, fd);
+	}
 }
 
-static void require_take(database_t* db, char* key, int fd) {
-	blob_t key_blob = blob_create(key, sizeof(key));
-	const bucket_t* bucket = db_take(db, &key_blob);
+static void require_take(database_t* database, char* key, int fd) {
+	blob_t key_blob = {
+		.memory = key,
+		.bytes = strlen(key)
+	};
 
-	if (bucket)
+	bucket_t* bucket = database_take(database, key_blob);
+
+	if (bucket) {
 		reply_with_blob(bucket->value, fd);
-	else
-		reply_with_code(ENOTFOUND, fd);
+
+		bucket_dereference(bucket);
+	} else {
+		reply_with_code(Enotfound, fd);
+	}
 }
 
-static void require_del(database_t* db, char* key, int fd) {
-	blob_t key_blob = blob_create(key, sizeof(key));
+static void require_del(database_t* database, char* key, int fd) {
+	blob_t key_blob = {
+		.memory = key,
+		.bytes = strlen(key)
+	};
 	
-	int found = db_delete(db, &key_blob);
+	database_delete(database, key_blob);
 
-	if (found)
-		reply_with_code(OK, fd);
-	else
-		reply_with_code(ENOTFOUND, fd);
+	reply_with_code(Ok, fd);
 }
 
-static void require_stats(database_t* db, int fd) {
-	record_t record = db_stats(db);
+static void require_stats(database_t* database, int fd) {
+	record_t record = database_stats(database);
+
 	reply_with_record(record, fd);
 }
 
 // Returns 0 when no command matches, otherwise returns command length
-static int set_command(char* buf, enum Command* command) {
+static int set_command(char* buf, Code* code) {
 	int command_length = 0;
 
-	if (!strcmp(buf,"STATS")) {
-		*command = Stats;
+	if (!strcmp(buf, "STATS")) {
+		*code = Stats;
 		command_length = 5;
 
-	} else {
+	} else if (!strncmp(buf, "PUT ", 4)) {
+		*code = Put;
+		command_length = 4;
 
-		if (!strncmp(buf, "PUT ", 4)) {
-			*command = Put;
-			command_length = 4;
+	} else if (!strncmp(buf, "GET ", 4)) {
+		*code = Get;
+		command_length = 4;
 
-		} else if (!strncmp(buf, "GET ", 4)) {
-			*command = Get;
-			command_length = 4;
+	} else if (!strncmp(buf, "DEL ", 4)) {
+		*code = Del;
+		command_length = 4;
 
-		} else if (!strncmp(buf, "DEL ", 4)) {
-			*command = Del;
-			command_length = 4;
-
-		} else if (!strncmp(buf, "TAKE ", 5)) {
-			*command = Take;	
-			command_length = 5;
-		}
+	} else if (!strncmp(buf, "TAKE ", 5)) {
+		*code = Take;
+		command_length = 5;
 	}
 
 	return command_length;
 }
 
-static char* find_next_space(char* buf) {
-	return strchr(buf, ' ');
-}
-
-static int distance_between_ptrs(char* start, char* ending) {
-	return (int) (ending - start);
-}
-
 static int get_key_length(char* key) {
-	char* next_space = find_next_space(key);
+	char* next_space = strchr(key, ' ');
 
 	if (!next_space)
 		return 0;
 
-	return distance_between_ptrs(key, next_space);
+	return next_space - key;
 }
 
-static char* create_str(char* str, int str_len) {
-	char* result = malloc(sizeof(char)*(str_len+1));
+static char* create_string_from(database_t* database, char* string, int length) {
+	char* result = database_memsafe_malloc(database, sizeof(char) * (length + 1));
 
-	strncpy(result, str, str_len);
+	strncpy(result, string, length);
 
 	return result;
 }
 
-static char* require_last_key(char* buf, int read_chars, int buf_len) {
-	char* key_ref = buf + read_chars;
+static char* require_last_key(database_t* database, char* buffer, int read_chars, int length) {
+	char* key_ref = buffer + read_chars;
 
-	if (find_next_space(key_ref))
+	if (strchr(key_ref, ' '))
 		return NULL;
 
-	int key_length = buf_len - read_chars;
+	int key_length = length - read_chars;
 
-	char* key = create_str(key_ref, key_length);
-
-	return key;
+	return create_string_from(database, key_ref, key_length);
 }
 
-static void str_move_to_beginning(char* buf, int src_idx, int buf_len) {
-	memmove(buf, buf + src_idx, buf_len - src_idx);
+static void string_move_to_beginning(char* string, int offset, int length) {
+	memmove(string, string + offset, length - offset);
 }
 
-static void handle_put(txt_state_machine_t* sm, int read_chars, int buf_len) {
+static void handle_put(txt_state_machine_t* state_machine, int read_chars, int buf_len) {
 	if (read_chars >= buf_len)
 		return;
 
-	char* key_ref = sm->buf + read_chars;
+	char* key_ref = state_machine->buf + read_chars;
 
 	int key_length = get_key_length(key_ref);
 
-	read_chars += key_length+1;
+	read_chars += key_length + 1;
 
 	if (!key_length || read_chars >= buf_len)
 		return;
 
-	char* value = require_last_key(sm->buf, read_chars, buf_len);
+	char* value = require_last_key(state_machine->database, state_machine->buf, read_chars, buf_len);
 
 	if (!value)
 		return;
 
-	char* key = create_str(key_ref, key_length);
+	char* key = create_string_from(state_machine->database, key_ref, key_length);
 
-	require_put(sm->db, key, value, sm->fd);
+	require_put(state_machine->database, key, value, state_machine->fd);
 }
 
-static void handle_one_argument_command(txt_state_machine_t* sm, int read_chars, int buf_len, command_handler f) {
+static void handle_one_argument_command(txt_state_machine_t* state_machine, int read_chars, int buf_len, command_handler f) {
 	if (read_chars >= buf_len)
 		return;
 
-	char* key = require_last_key(sm->buf, read_chars, buf_len);
+	char* key = require_last_key(state_machine->database, state_machine->buf, read_chars, buf_len);
 
 	if (key)
-		f(sm->db, key, sm->fd);
+		f(state_machine->database, key, state_machine->fd);
 }
 
-static void parse_line(txt_state_machine_t* sm, int buf_len) {
-	enum Command command;
+static void parse_line(txt_state_machine_t* state_machine, int buf_len) {
+	Code code;
 	
-	int read_chars = set_command(sm->buf, &command);
+	int read_chars = set_command(state_machine->buf, &code);
 
 	if (!read_chars)
 		return;
 
-	switch (command) {
+	switch (code) {
 	case Put:
-		handle_put(sm, read_chars, buf_len);
+		handle_put(state_machine, read_chars, buf_len);
 		break;
 
 	case Get:
-		handle_one_argument_command(sm, read_chars, buf_len, require_get);
+		handle_one_argument_command(state_machine, read_chars, buf_len, require_get);
 		break;
 
 	case Del:
-		handle_one_argument_command(sm, read_chars, buf_len, require_del);
+		handle_one_argument_command(state_machine, read_chars, buf_len, require_del);
 		break;
 
 	case Take:
-		handle_one_argument_command(sm, read_chars, buf_len, require_take);
+		handle_one_argument_command(state_machine, read_chars, buf_len, require_take);
 		break;
 
 	case Stats:
-		require_stats(sm->db, sm->fd);
+		require_stats(state_machine->database, state_machine->fd);
 		break;
+
+	default:
+	 	// TODO: handle error cases
+		abort();
 	}
 }
 
 static void delete_first_line(txt_state_machine_t* state_machine, int line_length) {
 	if (state_machine->read_characters > line_length)
-		str_move_to_beginning(state_machine->buf, line_length, state_machine->read_characters);
+		string_move_to_beginning(state_machine->buf, line_length, state_machine->read_characters);
 
 	state_machine->read_characters -= line_length;
 }
@@ -252,7 +282,7 @@ static int parse_recv(txt_state_machine_t* state_machine) {
 
 	*new_line = 0;
 
-	int line_length = distance_between_ptrs(state_machine->buf, new_line) + 1;
+	int line_length = new_line - state_machine->buf + 1;
 
 	parse_line(state_machine, line_length - 1);
 
@@ -275,9 +305,8 @@ int can_read_txt(txt_state_machine_t* state_machine) {
 	if (current_read < 0 && (errno == EAGAIN || errno == EWOULDBLOCK))
 		return 1;
 
-	if (current_read < 0) {
+	if (current_read < 0)
 		return 0;
-	}
 
 	state_machine->read_characters += current_read;
 
@@ -286,7 +315,7 @@ int can_read_txt(txt_state_machine_t* state_machine) {
 	int parse_ret = parse_recv(state_machine);
 
 	if (!parse_ret)
-		reply_with_code(EINVAL, state_machine->fd);
+		reply_with_code(Einval, state_machine->fd);
 
 	if (buf_is_full)
 		can_read_txt(state_machine);

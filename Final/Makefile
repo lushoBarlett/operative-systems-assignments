@@ -1,3 +1,4 @@
+CC := gcc
 SRC   := src
 TESTS := tests
 
@@ -16,7 +17,9 @@ CORE := \
 	bucket \
 	cell \
 	rw_lock \
-	database
+	database \
+	binary_parser \
+	text_parser
 
 TEST := \
 	blob \
@@ -55,10 +58,10 @@ clean:
 .PHONY: memcache
 memcache: dirs $(BIN)/memcache
 
-$(BIN)/memcache: $(BUILD)/main.o
+$(BIN)/memcache: $(BUILD)/main.o $(OBJECTS)
 	$(CC) $(FLAGS) -o $@ $^
 
-$(BUILD)/main.o: $(SRC)/main.c $(OBJECTS)
+$(BUILD)/main.o: $(SRC)/main.c
 	$(CC) -c $(FLAGS) -o $@ $<
 
 

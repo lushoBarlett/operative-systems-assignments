@@ -4,6 +4,7 @@
 #include <errno.h>
 #include <unistd.h>
 #include <arpa/inet.h>
+
 #include "binary_parser.h"
 
 static int check_finished(bin_state_machine_t* state_machine, int n) {
@@ -96,25 +97,28 @@ void require_stats() {
 	printf("requiring stats...\n");
 }
 
-int state_machine_advance(bin_state_machine_t* state_machine) {
+int bin_state_machine_advance(bin_state_machine_t* state_machine) {
 	int ret = 1;
 
 	switch (state_machine->code) {
-	case PUT:
+	case Put:
 		ret = handle_put(state_machine);
 		break;
-	case GET:
+	case Get:
 		ret = handle_get(state_machine);
 		break;
-	case DEL:
+	case Del:
 		ret = handle_del(state_machine);
 		break;
-	case TAKE:
+	case Take:
 		ret = handle_take(state_machine);
 		break;
-	case STATS:
-		handle_stats(state_machine);
+	case Stats:
+		//handle_stats(state_machine);
 		break;
+	default:
+	 	// TODO: handle error cases
+		abort();
 	}
 
 	if (ret > 0)
@@ -134,7 +138,7 @@ int handle_nothing(bin_state_machine_t* state_machine) {
 
 	state_machine->code = code;
 
-	return state_machine_advance(state_machine);
+	return bin_state_machine_advance(state_machine);
 }
 
 static int handle_one_argument_command(bin_state_machine_t* state_machine, void (*f)()) {
@@ -179,14 +183,15 @@ int handle_take(bin_state_machine_t* state_machine) {
 	return handle_one_argument_command(state_machine, require_take);
 }
 
-void handle_stats(bin_state_machine_t* state_machine) {
+/* void handle_stats(bin_state_machine_t* state_machine) {
 	require_stats();
-}
+} */
 
-void state_machine_init(bin_state_machine_t* state_machine, int fd) {
-	state_machine->code = NOTHING;
+void bin_state_machine_init(bin_state_machine_t* state_machine, int fd, database_t* database) {
+	state_machine->code = Ok;
 	state_machine->state = ReadingKeyLength;
 	state_machine->key = state_machine->value = NULL;
 	state_machine->read_characters = state_machine->arg_len = 0;
 	state_machine->fd = fd;
+	state_machine->database = database;
 }

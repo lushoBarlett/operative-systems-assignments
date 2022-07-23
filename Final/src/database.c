@@ -231,7 +231,7 @@ void database_delete(database_t* database, blob_t key) {
 	bucket_dereference(bucket);
 }
 
-record_t databases_stats(database_t* database) {
+record_t database_stats(database_t* database) {
 	return report(&database->record);
 }
 
