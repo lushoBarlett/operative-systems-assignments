@@ -3,7 +3,8 @@
 #include "cell.h"
 #include "lru_queue.h"
 #include "record.h"
-#include "rw_lock.h"
+
+#define CAPACITY 999983
 
 /*
  * TODO: justificar LRU
@@ -14,11 +15,7 @@
 typedef struct {
 	counter64_t size;
 
-	size_t capacity;
-	pthread_mutex_t capacity_lock;
-
 	cell_t* cells;
-	rw_lock_t rw_cells_lock;
 
 	lru_queue_t lru_queue;
 	concurrent_record_t record;

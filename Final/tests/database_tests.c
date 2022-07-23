@@ -130,11 +130,9 @@ static void get_after_reinsertion_returs_the_second_value() {
 	database_destroy(&database);
 }
 
-static blob_t make_random_blob_from(uint64_t* memory, size_t size) {
-	for (size_t i = 0; i < size; i++) {
-		*memory = rand();
-		*memory = *memory << 32 | rand();
-	}
+static blob_t make_random_blob_from(uint64_t* memory) {
+	*memory = rand();
+	*memory = *memory << 32 | rand();
 
 	return (blob_t) {
 		.memory = memory,
@@ -142,26 +140,9 @@ static blob_t make_random_blob_from(uint64_t* memory, size_t size) {
 	};
 }
 
-static blob_t random_blob() {
-	return make_random_blob_from(
-		malloc(sizeof(uint64_t)), 1);
-}
-
-static void should_expand_along_with_insertions() {
-	database_t database = init();
-
-	for (size_t i = 0; i < 10000; i++) {
-		database_put(&database, bucket_create(random_blob(), random_blob()));
-
-		assert(counter_get(&database.size) < database.capacity);
-	}
-
-	database_destroy(&database);
-}
-
 static blob_t database_memsafe_random_blob(database_t* database) {
 	return make_random_blob_from(
-		database_memsafe_malloc(database, sizeof(uint64_t) * 8), 8);
+		database_memsafe_malloc(database, sizeof(uint64_t)));
 }
 
 static bucket_t* database_memsafe_bucket_create(database_t* database, blob_t key, blob_t value) {
@@ -176,8 +157,16 @@ static void database_releases_memory_when_needed() {
 	struct rlimit restore;
 	getrlimit(RLIMIT_AS, &restore);
 
+	size_t database_size = sizeof(cell_t) * CAPACITY;
+
+	size_t blob_size = sizeof(blob_t) + 64;
+	size_t bucket_size = sizeof(bucket_t) + 2 * blob_size;
+	
+	// asumimos que esto es para el stack y esas cosas
+	size_t four_megabytes = 1 << 22;
+
 	struct rlimit newlimit = {
-		.rlim_cur =  1 << 20,
+		.rlim_cur = database_size + 100 * bucket_size + four_megabytes,
 		.rlim_max = -1,
 	};
 	setrlimit(RLIMIT_AS, &newlimit);
@@ -214,5 +203,4 @@ void database_tests() {
 	TEST(get_after_take_returns_null());
 	TEST(get_after_delete_returns_null());
 	TEST(get_after_reinsertion_returs_the_second_value());
-	TEST(should_expand_along_with_insertions());
 }

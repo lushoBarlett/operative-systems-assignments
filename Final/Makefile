@@ -16,7 +16,6 @@ CORE := \
 	lru_queue \
 	bucket \
 	cell \
-	rw_lock \
 	database \
 	binary_parser \
 	text_parser
@@ -27,7 +26,6 @@ TEST := \
 	lru_queue \
 	bucket \
 	cell \
-	rw_lock \
 	database
 
 OBJECTS := $(CORE:%=$(BUILD)/%.o)
