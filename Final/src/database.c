@@ -61,24 +61,18 @@ static bucket_t* insert(database_t* database, bucket_t* bucket) {
 	return old_bucket;
 }
 
-static size_t put(database_t* database, bucket_t* bucket) {
+static void put(database_t* database, bucket_t* bucket) {
 	bucket_t* old_bucket = insert(database, bucket);
-
-	size_t new_size;
 
 	if (old_bucket) {
 		lru_queue_delete(&database->lru_queue, old_bucket);
 
 		bucket_dereference(old_bucket);
-		
-		new_size = counter_get(&database->size);
 	} else {
-		new_size = counter_increment(&database->size);
+		counter_increment(&database->size);
 	}
 
 	lru_queue_enqueue(&database->lru_queue, SHARE(bucket));
-
-	return new_size;
 }
 
 void database_put(database_t* database, bucket_t* bucket) {
