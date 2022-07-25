@@ -1,6 +1,7 @@
 #pragma once
 
 typedef enum {
+	Nothing,
 	Put = 11,
 	Del = 12,
 	Get = 13,
