@@ -57,7 +57,7 @@ clean:
 memcache: dirs $(BIN)/memcache
 
 $(BIN)/memcache: $(BUILD)/main.o $(OBJECTS)
-	$(CC) $(FLAGS) -o $@ $^
+	$(CC) $(FLAGS) -pthread -o $@ $^
 
 $(BUILD)/main.o: $(SRC)/main.c
 	$(CC) -c $(FLAGS) -o $@ $<
