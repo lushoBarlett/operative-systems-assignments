@@ -29,7 +29,7 @@ bucket_t* database_get(database_t* database, blob_t key);
 
 bucket_t* database_take(database_t* database, blob_t key);
 
-void database_delete(database_t* database, blob_t key);
+int database_delete(database_t* database, blob_t key);
 
 record_t database_stats(database_t* database);
 

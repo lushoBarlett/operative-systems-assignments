@@ -187,13 +187,19 @@ bucket_t* database_take(database_t* database, blob_t key) {
 	return bucket;
 }
 
-void database_delete(database_t* database, blob_t key) {
+int database_delete(database_t* database, blob_t key) {
+	int found = 0;
+
 	bucket_t* bucket = take(database, key);
 
 	counter_increment(&database->record.dels);
 
-	if (bucket)
+	if (bucket) {
+		found = 1;
 		bucket_dereference(bucket);
+	}
+
+	return found;
 }
 
 record_t database_stats(database_t* database) {
