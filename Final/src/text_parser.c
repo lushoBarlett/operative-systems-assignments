@@ -1,5 +1,4 @@
 #include "text_parser.h"
-
 #include <string.h>
 #include <stdlib.h>
 #include <assert.h>
@@ -13,19 +12,14 @@
 
 #define MAX_BUF_SIZE 2048
 
-// TODO: dereference buckets returned by database interface
-// TODO: reply einval when a line isn't valid
-
 void txt_state_machine_init(txt_state_machine_t* state_machine, int fd, database_t* database) {
 	state_machine->read_characters = 0;
 	state_machine->fd = fd;
 	state_machine->database = database;
 }
 
-static void reply_with_code(Code code, int fd) {
-	char response[2] = {code, '\n'};
-
-	write(fd, response, 2);
+static void reply_with_str(char* str, int str_len, int fd) {
+	write(fd, str, str_len);
 }
 
 static void reply_with_blob(blob_t value, int fd) {
@@ -35,7 +29,7 @@ static void reply_with_blob(blob_t value, int fd) {
 
 	char* memory = value.memory;
 
-	size_t i = 2;	
+	size_t i = 3;	
 
 	for (size_t b = 0; b < limit; b++)
 		response[i++] = isprint(memory[b]) ? memory[b] : '.';
@@ -63,7 +57,7 @@ static void reply_with_record(record_t record, int fd) {
 	int written_count = record_to_string(record, response, 2048);
 
 	if (written_count >= 2048)
-		reply_with_code(Ebig, fd);
+		reply_with_str("EBIG\n", 4, fd);
 	else
 		write(fd, response, written_count);
 }
@@ -85,7 +79,7 @@ static void require_put(database_t* database, char* key, char* value, int fd) {
 
 	database_put(database, bucket);
 
-	reply_with_code(Ok, fd);
+	reply_with_str("OK\n", 3, fd);
 }
 
 static void require_get(database_t* database, char* key, int fd) {
@@ -101,7 +95,7 @@ static void require_get(database_t* database, char* key, int fd) {
 
 		bucket_dereference(bucket);
 	} else {
-		reply_with_code(Enotfound, fd);
+		reply_with_str("ENOTFOUND\n", 10, fd);
 	}
 }
 
@@ -118,7 +112,7 @@ static void require_take(database_t* database, char* key, int fd) {
 
 		bucket_dereference(bucket);
 	} else {
-		reply_with_code(Enotfound, fd);
+		reply_with_str("ENOTFOUND\n", 10, fd);
 	}
 }
 
@@ -128,9 +122,12 @@ static void require_del(database_t* database, char* key, int fd) {
 		.bytes = strlen(key)
 	};
 	
-	database_delete(database, key_blob);
+	int found = database_delete(database, key_blob);
 
-	reply_with_code(Ok, fd);
+	if (found)
+		reply_with_str("OK\n", 3, fd);
+	else
+		reply_with_str("ENOTFOUND\n", 10, fd);
 }
 
 static void require_stats(database_t* database, int fd) {
@@ -233,6 +230,7 @@ static void handle_one_argument_command(txt_state_machine_t* state_machine, int 
 }
 
 static void parse_line(txt_state_machine_t* state_machine, int buf_len) {
+	
 	Code code;
 	
 	int read_chars = set_command(state_machine->buf, &code);
@@ -275,7 +273,7 @@ static void delete_first_line(txt_state_machine_t* state_machine, int line_lengt
 }
 
 static int parse_recv(txt_state_machine_t* state_machine) {
-	char* new_line = strchr(state_machine->buf, '.');
+	char* new_line = strchr(state_machine->buf, '\n');
 
 	if (!new_line)
 		return (state_machine->read_characters < MAX_BUF_SIZE);
@@ -315,7 +313,7 @@ int can_read_txt(txt_state_machine_t* state_machine) {
 	int parse_ret = parse_recv(state_machine);
 
 	if (!parse_ret)
-		reply_with_code(Einval, state_machine->fd);
+		reply_with_str("EINVAL\n", 7, state_machine->fd);
 
 	if (buf_is_full)
 		can_read_txt(state_machine);
