@@ -3,13 +3,26 @@
 #include <stdlib.h>
 
 static void free_one_bucket(database_t* database) {
+	lru_queue_lock(&database->lru_queue);
+
 	bucket_t* bucket = lru_queue_dequeue(&database->lru_queue);
+
+	lru_queue_unlock(&database->lru_queue);
+
+	// TODO: handle NULL?
 
 	cell_t* cell = &database->cells[bucket->cell_index];
 
 	cell_lock(cell);
 
-	cell_delete_bucket(cell, bucket);
+	/*
+	 * Revisamos que no nos hayan quitado de la tabla hash.
+	 * Esto es importante ya que si bien cell delete
+	 * no tiene efecto si ya nos borraron, sigue
+	 * restando una referencia.
+	 */
+	if (cell_in_list(cell, bucket))
+		cell_delete_bucket(cell, bucket);
 
 	cell_unlock(cell);
 
@@ -62,17 +75,38 @@ static bucket_t* insert(database_t* database, bucket_t* bucket) {
 }
 
 static void put(database_t* database, bucket_t* bucket) {
+	/*
+	 * Hacemos el enqueue antes del insert,
+	 * por el caso en donde otro insert, de la misma clave,
+	 * nos quite de la tabla hash antes de que
+	 * nosotros podamos haber entrado en la LRU
+	 */
+	lru_queue_lock(&database->lru_queue);
+
+	lru_queue_enqueue(&database->lru_queue, SHARE(bucket));
+
+	lru_queue_unlock(&database->lru_queue);
+
 	bucket_t* old_bucket = insert(database, bucket);
 
 	if (old_bucket) {
-		lru_queue_delete(&database->lru_queue, old_bucket);
+		lru_queue_lock(&database->lru_queue);
+
+		/*
+		 * Revisamos que no nos hayan quitado de la LRU.
+		 * Esto es importante ya que si bien queue delete
+		 * no tiene efecto si ya nos borraron, sigue
+		 * restando una referencia.
+		 */
+		if (lru_in_queue(&database->lru_queue, old_bucket))
+			lru_queue_delete(&database->lru_queue, old_bucket);
+
+		lru_queue_unlock(&database->lru_queue);
 
 		bucket_dereference(old_bucket);
 	} else {
 		counter_increment(&database->size);
 	}
-
-	lru_queue_enqueue(&database->lru_queue, SHARE(bucket));
 }
 
 void database_put(database_t* database, bucket_t* bucket) {
@@ -90,8 +124,20 @@ static bucket_t* get(database_t* database, blob_t key) {
 
 	cell_unlock(cell);
 
-	if (bucket)
-		lru_queue_reenqueue(&database->lru_queue, bucket);
+	if (bucket) {
+		lru_queue_lock(&database->lru_queue);
+
+		/*
+		 * Revisamos que no nos hayan quitado de la LRU.
+		 * Esto es importante si después de que hicimos find
+		 * alguien más nos hizo un delete o un take, o trataron
+		 * de liberar memoria
+		 */
+		if (lru_in_queue(&database->lru_queue, bucket))
+			lru_queue_reenqueue(&database->lru_queue, bucket);
+
+		lru_queue_unlock(&database->lru_queue);
+	}
 
 	return bucket;
 }
@@ -113,8 +159,22 @@ static bucket_t* take(database_t* database, blob_t key) {
 
 	cell_unlock(cell);
 
-	if (bucket)
-		lru_queue_delete(&database->lru_queue, bucket);
+	if (bucket) {
+		lru_queue_lock(&database->lru_queue);
+
+		/*
+		 * Revisamos que no nos hayan quitado de la LRU.
+		 * Esto es importante ya que si bien queue delete
+		 * no tiene efecto si ya nos borraron, sigue
+		 * restando una referencia.
+		 */
+		if (lru_in_queue(&database->lru_queue, bucket))
+			lru_queue_delete(&database->lru_queue, bucket);
+
+		lru_queue_unlock(&database->lru_queue);
+
+		counter_decrement(&database->size);
+	}
 
 	return bucket;
 }
@@ -132,7 +192,8 @@ void database_delete(database_t* database, blob_t key) {
 
 	counter_increment(&database->record.dels);
 
-	bucket_dereference(bucket);
+	if (bucket)
+		bucket_dereference(bucket);
 }
 
 record_t database_stats(database_t* database) {

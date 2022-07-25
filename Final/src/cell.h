@@ -21,6 +21,8 @@ void cell_lock(cell_t* cell);
 
 void cell_unlock(cell_t* cell);
 
+int cell_in_list(cell_t* cell, bucket_t* bucket);
+
 bucket_t* cell_find(cell_t* cell, blob_t key);
 
 void cell_delete_bucket(cell_t* cell, bucket_t* bucket);

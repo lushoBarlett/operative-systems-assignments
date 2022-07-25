@@ -48,9 +48,9 @@ static void database_delete_from_string(database_t* database, const char* key) {
 static bucket_t* database_put_from_strings(database_t* database, const char* key, const char* value) {
 	bucket_t* bucket = bucket_from_strings(key, value);
 
-	database_put(database, bucket);
+	database_put(database, SHARE(bucket));
 
-	return SHARE(bucket);
+	return bucket;
 }
 
 static void assert_equals_then_dereference(bucket_t* expected, bucket_t* got) {
@@ -136,7 +136,7 @@ static blob_t make_random_blob_from(uint64_t* memory) {
 
 	return (blob_t) {
 		.memory = memory,
-		.bytes = 64,
+		.bytes = 8,
 	};
 }
 
@@ -187,6 +187,107 @@ static void database_releases_memory_when_needed() {
 	setrlimit(RLIMIT_AS, &restore);
 }
 
+static void delete_the_same_element_concurrently() {
+	database_t database = init();
+
+	for (size_t i = 0; i < 10000; i++) {
+		bucket_dereference(database_put_from_strings(&database, "key", "value"));
+
+		#pragma omp parallel
+		database_delete_from_string(&database, "key");
+	}
+
+	database_destroy(&database);
+}
+
+static void take_and_get_the_same_element_concurrently() {
+	database_t database = init();
+
+	for (size_t i = 0; i < 10000; i++) {
+		bucket_t* bucket = database_put_from_strings(&database, "key", "value");
+
+		bucket_t* got;
+		bucket_t* took;
+
+		#pragma omp parallel sections
+		{
+			#pragma omp section
+			{
+				took = database_take_from_string(&database, "key");
+			}
+
+			#pragma omp section
+			{
+				got = database_get_from_string(&database, "key");
+			}
+		}
+
+		assert(got == bucket || got == NULL);
+		assert(took == bucket);
+
+		bucket_dereference(bucket);
+
+		if (got)
+			bucket_dereference(got);
+
+		bucket_dereference(took);
+	}
+
+	database_destroy(&database);
+}
+
+static void insert_same_key_concurrently_and_get() {
+	database_t database = init();
+
+	for (size_t i = 0; i < 10000; i++) {
+
+		bucket_t* first;
+		bucket_t* second;
+		bucket_t* got;
+
+		#pragma omp parallel sections
+		{
+			#pragma omp section
+			{
+				first = database_put_from_strings(&database, "key", "value1");
+			}
+
+			#pragma omp section
+			{
+				second = database_put_from_strings(&database, "key", "value2");
+			}
+		}
+
+		got = database_get_from_string(&database, "key");
+
+		assert(got == first || got == second);
+
+		bucket_dereference(first);
+		bucket_dereference(second);
+
+		assert(counter_get(&got->references) == 3);
+
+		bucket_dereference(got);
+	}
+
+	database_destroy(&database);
+}
+
+static void free_memory_while_inserting() {
+	database_t database = init();
+
+	#pragma omp parallel for
+	for (size_t i = 0; i < 1000000; i++) {
+		blob_t key = database_memsafe_random_blob(&database);
+		blob_t value = database_memsafe_random_blob(&database);
+		bucket_t* bucket = database_memsafe_bucket_create(&database, key, value);
+
+		database_put(&database, bucket);
+	}
+
+	database_destroy(&database);
+}
+
 void database_tests() {
 	srand(time(NULL));
 
@@ -203,4 +304,9 @@ void database_tests() {
 	TEST(get_after_take_returns_null());
 	TEST(get_after_delete_returns_null());
 	TEST(get_after_reinsertion_returs_the_second_value());
+
+	TEST(delete_the_same_element_concurrently());
+	TEST(take_and_get_the_same_element_concurrently());
+	TEST(insert_same_key_concurrently_and_get());
+	TEST(free_memory_while_inserting());
 }

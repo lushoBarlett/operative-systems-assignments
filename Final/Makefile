@@ -70,7 +70,7 @@ $(BUILD)/main.o: $(SRC)/main.c
 tests: dirs $(BIN)/tests
 
 $(BIN)/tests: $(BUILD)/tests.o $(TEST_OBJECTS) $(OBJECTS) $(BUILD)/test_utils.o
-	$(CC) $(FLAGS) -o $@ $^
+	$(CC) $(FLAGS) -fopenmp -o $@ $^
 
 $(BUILD)/tests.o: $(TESTS)/main.c
 	$(CC) -c $(FLAGS) -o $@ $<
@@ -86,7 +86,7 @@ $(BUILD)/test_utils.o: $(TESTS)/test_utils.c $(TESTS)/test_utils.h
 # FALLBACK TEST RULE
 
 $(BUILD)/%_tests.o: $(TESTS)/%_tests.c $(TESTS)/%_tests.h $(SRC)/%.h
-	$(CC) -c $(FLAGS) -o $@ $<
+	$(CC) -c $(FLAGS) -fopenmp -o $@ $<
 
 
 

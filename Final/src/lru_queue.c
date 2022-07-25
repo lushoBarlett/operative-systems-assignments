@@ -13,6 +13,14 @@ void lru_queue_unlock(lru_queue_t* lru_queue) {
 	pthread_mutex_unlock(&lru_queue->lock);
 }
 
+int lru_in_queue(lru_queue_t* lru_queue, bucket_t* bucket) {
+	return
+		lru_queue->front == bucket ||
+		lru_queue->back == bucket ||
+		bucket->next_queue ||
+		bucket->prev_queue;
+}
+
 static void enqueue_operation(lru_queue_t* lru_queue, bucket_t* bucket) {
 	if (lru_queue->front == NULL)
 		lru_queue->front = bucket;
