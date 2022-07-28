@@ -222,8 +222,11 @@ static int handle_nothing(bin_state_machine_t* state_machine) {
 
 static int handle_one_argument_command(bin_state_machine_t* state_machine, void (*f)(bin_state_machine_t*)) {
 	int success = parse_command(state_machine, &state_machine->key, &state_machine->key_len);
-	if (success > 0)
+	if (success > 0) {
 		f(state_machine);
+		free(state_machine->key);
+	}
+		
 	return success;
 }
 
@@ -300,7 +303,7 @@ int bin_state_machine_advance(bin_state_machine_t* state_machine) {
 		old_code = state_machine->code;
 	}	
 
-	return ret;
+	return ret >= 0;
 }
 
 void bin_state_machine_init(bin_state_machine_t* state_machine, int fd, database_t* database) {
