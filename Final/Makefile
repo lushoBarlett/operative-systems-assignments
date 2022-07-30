@@ -18,7 +18,9 @@ CORE := \
 	cell \
 	database \
 	binary_parser \
-	text_parser
+	text_parser \
+	epoll_utils \
+	server_utils
 
 TEST := \
 	blob \
