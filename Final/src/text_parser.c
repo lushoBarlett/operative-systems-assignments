@@ -42,10 +42,11 @@ static void reply_with_blob(blob_t value, int fd) {
 static int record_to_string(record_t record, char* str, int size) {
 	return snprintf(
 		str, size,
-		"OK PUTS=%ld DELS=%ld GETS=%ld KEYS=%ld BYTES=%ld\n",
+		"OK PUTS=%ld DELS=%ld GETS=%ld TAKES=%ld KEYS=%ld BYTES=%ld\n",
 		record.puts,
 		record.dels,
 		record.gets,
+		record.takes,
 		record.keys,
 		record.bytes
 	);

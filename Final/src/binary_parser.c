@@ -9,10 +9,11 @@
 static int record_to_string(record_t record, char* str, int size) {
 	return snprintf(
 		str, size,
-		"PUTS=%ld DELS=%ld GETS=%ld KEYS=%ld BYTES=%ld\n",
+		"PUTS=%ld DELS=%ld GETS=%ld TAKES=%ld KEYS=%ld BYTES=%ld\n",
 		record.puts,
 		record.dels,
 		record.gets,
+		record.takes,
 		record.keys,
 		record.bytes
 	);
