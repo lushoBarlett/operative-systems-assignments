@@ -22,6 +22,20 @@
 #include "database.h"
 #include "epoll_utils.h"
 
+/*
+ * Estructura para guardar los argumentos que se pasaran
+ * a los threads para que reciban eventos
+ * 
+ * La cabeza de la lista de fdinfos por si un cliente
+ * cierra su conexion y lo tengo que eliminar de la misma
+ * 
+ * Un lock para asegurar la sincronizacion al sacar o agregar
+ * elementos a la lista de fdinfo
+ * 
+ * El file descriptor del epoll
+ * 
+ * Un puntero a la base de datos
+ */
 typedef struct thread_args {
 	fdinfo_list_t** head;
 	pthread_mutex_t lock;
@@ -29,4 +43,7 @@ typedef struct thread_args {
 	database_t* database;
 } thread_args_t;
 
+/*
+ * Ejecucion completa del servidor
+ */
 void server_run(database_t* database);

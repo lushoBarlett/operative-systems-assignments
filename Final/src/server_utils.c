@@ -2,6 +2,9 @@
 
 #define RETURN_IF_NEGATIVE(N) ({if (N < 0) return N;})
 
+/*
+ * Devuelve un file descriptor para recibir la señal SIGINT alli
+ */
 static int require_signal_fd() {
 	sigset_t mask;
 	int sfd;
@@ -40,6 +43,9 @@ static int require_bind(int listen_socket, int port) {
 	return bind(listen_socket, (const struct sockaddr*)&socket_address, sizeof socket_address);
 }
 
+/*
+ * Crea un socket de escucha bindeado al puerto dado
+ */
 static int configure_lsock(int port) {
 	int listen_socket = require_socket();
 
@@ -60,18 +66,26 @@ static size_t core_count() {
 	return sysconf(_SC_NPROCESSORS_ONLN);
 }
 
+/*
+ * Bucle principal
+ * Recibe eventos en los file descriptors observados y los maneja
+ */
 static void service(int epfd, pthread_mutex_t* lock, fdinfo_list_t** head_ptr, database_t* database) {
 	int stop = 0;
 
 	struct epoll_event event;	
 
 	while (!stop) {
-		// TODO: set argument to more than 1?
-		int n = epoll_wait(epfd, &event, 1, -1);
+		int n = epoll_wait(epfd, &event, 10, -1);
 
 		if (n < 0 && errno != EINTR)
 			stop = 1;
 
+		/*
+		 * Si un evento es recibido en el file descriptor donde aceptamos
+		 * señales, cortamos el bucle. Todos los threads van a recibirla
+		 * porque no esta marcado con EPOLLONESHOT
+		 */
 		for (size_t i = 0; i < (size_t)n && !stop; i++)
 			if (handle_event(epfd, event, head_ptr, lock, database) == -1)
 				stop = 1;
@@ -105,14 +119,27 @@ static void join_service_threads(pthread_t* threads, size_t thread_amount) {
 		pthread_join(threads[i], NULL);
 }
 
+/*
+ * Crea e inicia los argumentos para pasar al thread
+ */
 static thread_args_t* thread_args_create(int epfd, database_t* database) {
-	thread_args_t* thread_args = database_memsafe_malloc(database, sizeof(thread_args_t));
+	thread_args_t* thread_args = malloc(sizeof(thread_args_t));
+
+	if (!thread_args)
+		return NULL;
 
 	pthread_mutex_init(&thread_args->lock, NULL);
 	
 	thread_args->epfd = epfd;
 
-	fdinfo_list_t** head_ptr = database_memsafe_malloc(database, sizeof(fdinfo_list_t*));
+	fdinfo_list_t** head_ptr = malloc(sizeof(fdinfo_list_t*));
+
+	if (!head_ptr) {
+		free(thread_args);
+		pthread_mutex_destroy(&thread_args->lock);
+		return NULL;
+	}
+
 	*head_ptr = NULL;
 	thread_args->head = head_ptr;
 
@@ -121,17 +148,24 @@ static thread_args_t* thread_args_create(int epfd, database_t* database) {
 	return thread_args;
 }
 
-static void service_threads(pthread_t* threads, size_t thread_amount, int epfd, database_t* database) {
-	thread_args_t* thread_args = thread_args_create(epfd, database);
-
-	spawn_service_threads(threads, thread_amount, thread_args);
-	join_service_threads(threads, thread_amount);
-
+static void thread_args_destroy(thread_args_t* thread_args, int epfd) {
 	fdinfo_list_destroy_remaining(epfd, thread_args->head);
 
 	pthread_mutex_destroy(&thread_args->lock);
 	
 	free(thread_args);
+}
+
+static void service_threads(pthread_t* threads, size_t thread_amount, int epfd, database_t* database) {
+	thread_args_t* thread_args = thread_args_create(epfd, database);
+
+	if (!thread_args)
+		return;
+
+	spawn_service_threads(threads, thread_amount, thread_args);
+	join_service_threads(threads, thread_amount);
+
+	thread_args_destroy(thread_args, epfd);
 }
 
 static int get_sockets(int* listen_txt_sock, int* listen_bin_sock, int* signalfd) {
@@ -172,23 +206,23 @@ void server_run(database_t* database) {
 	if (get_sockets(&listen_txt_sock, &listen_bin_sock, &signalfd) < 0)
 		goto socket_error;
 	
-	fdinfo_list_t* fdinfo_listen_txt = poll_socket(listen_txt_sock, epfd, Listen, Text, database);
+	fdinfo_list_t* fdinfo_listen_txt = poll_socket(listen_txt_sock, epfd, Listen, Text, NULL);
 
 	if (!fdinfo_listen_txt)
 		goto fdinfo_listen_txt_error;
 
-	fdinfo_list_t* fdinfo_listen_bin = poll_socket(listen_bin_sock, epfd, Listen, Binary, database);
+	fdinfo_list_t* fdinfo_listen_bin = poll_socket(listen_bin_sock, epfd, Listen, Binary, NULL);
 
 	if (!fdinfo_listen_bin)
 		goto fdinfo_listen_bin_error;
 
-	fdinfo_list_t* fdinfo_signal = poll_socket(signalfd, epfd, Signal, Text, database);
+	fdinfo_list_t* fdinfo_signal = poll_socket(signalfd, epfd, Signal, Text, NULL);
 
 	if (!fdinfo_signal)
 		goto fdinfo_signal_error;
 	
 	size_t thread_amount = core_count();
-	pthread_t* threads = database_memsafe_malloc(database, sizeof(*threads) * thread_amount);
+	pthread_t* threads = malloc(sizeof(*threads) * thread_amount);
 
 	if (!threads)
 		goto thread_error;

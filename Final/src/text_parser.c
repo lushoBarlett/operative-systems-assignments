@@ -332,7 +332,7 @@ int text_state_machine_advance(text_state_machine_t* state_machine) {
 	 * Error al leer el file descriptor resulta en error irrecuperable
 	 */
 	if (read_stream(state_machine) == -1)
-		return -1;
+		return 0;
 
 	size_t line_length;
 
@@ -356,7 +356,7 @@ int text_state_machine_advance(text_state_machine_t* state_machine) {
 	 * es un error irrecuperable
 	 */
 	if (buffer_is_full(state_machine))
-		return -1;
+		return 0;
 
 	return 1;
 }

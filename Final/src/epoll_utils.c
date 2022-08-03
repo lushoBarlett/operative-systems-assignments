@@ -1,5 +1,18 @@
 #include "epoll_utils.h"
 
+/*
+ * Setea los eventos de interes para un socket.
+
+ * Si es cliente, nos interesa cuando hay nuevos
+ * mensajes, cuando hay desconexion y ademas
+ * que cada evento lo reciba un solo thread
+ * 
+ * Si es una señal queremos que la reciban todos
+ * los threads
+ * 
+ * Si es un socket de escucha queremos que
+ * lo reciba un solo thread
+ */
 static void poll_set_event(struct epoll_event* ev, Sock_type type) {
 	if (type == Client)
 		ev->events = EPOLLIN | EPOLLONESHOT | EPOLLHUP | EPOLLRDHUP;
@@ -19,32 +32,59 @@ static void client_state_machine_init(fdinfo_list_t* fdinfo, Cli_type cli_type, 
 		text_state_machine_init(&fdinfo->text_state_machine, fdinfo->fd, database);
 }
 
+/*
+ * Crea un fdinfo.
+
+ * Utilizando un malloc safe que utiliza la lru
+ * si el fdinfo es para un cliente.
+ * Si no solo utiliza malloc ya que el servidor esta arrancando.
+ */
+static fdinfo_list_t* fdinfo_create(int socket, Sock_type sock_type, Cli_type cli_type, database_t* database) {
+	fdinfo_list_t* fdinfo;
+
+	if (sock_type == Client)
+		fdinfo = database_memsafe_malloc(database, sizeof (fdinfo_list_t));
+	else
+		fdinfo = malloc(sizeof (fdinfo_list_t));
+
+	if (!fdinfo)
+		return NULL;
+	
+	fdinfo->fd = socket;
+	fdinfo->sock_type = sock_type;
+	fdinfo->cli_type = cli_type;
+
+	if (sock_type == Client)
+		client_state_machine_init(fdinfo, cli_type, database);
+
+	return fdinfo;
+}
+
+/*
+ * Agrega un socket a la lista de seguimiento de epoll
+ * 
+ * Se encarga de crear un fdinfo que tendra la informacion
+ * de la conexion y si todo sale correctamente lo retorna.
+ * Ademas setea los eventos a seguir en dicho file descriptor
+ * 
+ * En caso de error retorna NULL
+ */
 fdinfo_list_t* poll_socket(int socket, int epfd, Sock_type sock_type, Cli_type cli_type, database_t* database) {
 
 	struct epoll_event ev;
-	fdinfo_list_t* fdinfo = database_memsafe_malloc(database, sizeof (fdinfo_list_t));
-	fdinfo->sock_type = sock_type;
-	fdinfo->fd = socket;
 
-	if (sock_type != Signal) {
-		
-		fdinfo->cli_type = cli_type;
+	ev.data.ptr = fdinfo_create(socket, sock_type, cli_type, database);
 
-		if (sock_type == Client)
-			client_state_machine_init(fdinfo, cli_type, database);	
-	}
-
-	ev.data.ptr = fdinfo;
+	if (!(ev.data.ptr))
+		return NULL;
 
 	poll_set_event(&ev, sock_type);
 
-	int res = epoll_ctl(epfd, EPOLL_CTL_ADD, socket, &ev);
-
-	if (res < 0) {
-		free(fdinfo);
+	if (epoll_ctl(epfd, EPOLL_CTL_ADD, socket, &ev) < 0) {
+		free(ev.data.ptr);
 		return NULL;
 	} else
-		return fdinfo;
+		return ev.data.ptr;
 }
 
 static int repoll_socket(fdinfo_list_t* fdinfo, int epfd, Sock_type type) {
@@ -85,6 +125,12 @@ static void fdinfo_list_add(fdinfo_list_t* new_fdinfo, fdinfo_list_t** head) {
 	*head = new_fdinfo;
 }
 
+/*
+ * Libera los recursos de los clientes conectados al servidor.
+ * En este caso no utilizamos ninguna medida de sincronizacion
+ * porque la utilizaremos cuando el servidor se este cerrando
+ * y lo hara solo un thread
+ */
 void fdinfo_list_destroy_remaining(int epfd, fdinfo_list_t** head_ptr) {
 	fdinfo_list_t* head = *head_ptr;
 	fdinfo_list_t* tmp;
@@ -102,6 +148,16 @@ static int is_hup_event(uint32_t events) {
 	return (events & EPOLLRDHUP || events &  EPOLLHUP);
 }
 
+/*
+ * Maneja un evento ocurrido en el file descriptor de un cliente
+ * 
+ * Si no es un evento por desconexion, hara avanzar su maquina
+ * de estados.
+ * 
+ * Lo matara si hubo un error en el parseo o si el evento era una
+ * desconexion. Utilizamos un lock para ello para evitar
+ * race conditions en la lista enlazada de fdinfos
+ */
 static void handle_client(int epfd, struct epoll_event event, fdinfo_list_t* fdinfo, fdinfo_list_t** head, pthread_mutex_t* lock) {
 	int ret_value = 0;
 
@@ -126,6 +182,11 @@ static void handle_client(int epfd, struct epoll_event event, fdinfo_list_t* fdi
 		repoll_socket(fdinfo, epfd, Client);
 }
 
+/*
+ * Intenta aceptar una nueva conexion.
+ * Si puede agrega la informacion del cliente a la lista
+ * de fdinfos
+ */
 static void handle_listener(int epfd, fdinfo_list_t* fdinfo, fdinfo_list_t** head, pthread_mutex_t* lock, database_t* database) {
 	int listen_socket = fdinfo->fd;
 
