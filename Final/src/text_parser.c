@@ -141,7 +141,7 @@ static void stats(database_t* database, int file_descriptor) {
  * el código correspondiente, sino no hace nada y retorna el código Nothing
  */
 static Code parse_code(char** input) {
-	if (strncmp(*input, "STATS", 5)) {
+	if (!strncmp(*input, "STATS", 5)) {
 		*input += 5;
 		return Stats;
 
@@ -166,32 +166,35 @@ static Code parse_code(char** input) {
 }
 
 /*
- * Indica dónde está el final de palabra,
+ * Indica dónde está el comienzo de palabra,
  * solamente en el caso en que luego siga otra
  * y avanza el puntero pasado como argumento.
 
  * En otro caso retorna NULL sin hacer nada más.
  */
 static char* parse_word_and_space(char** input) {
+	char* start = *input;
 	char* space = strchr(*input, ' ');
 
-	if (space) {
-		*space = 0;
+	if (!space)
+		return NULL;
 
-		*input = space + 1;
-	}
+	*space = 0;
 
-	return space;
+	*input = space + 1;
+
+	return start;
 }
 
 /*
- * Indica dónde está el final de la línea,
+ * Indica dónde está el comienzo de la línea,
  * solamente en el caso en que no haya un espacio antes
  * y avanza el puntero pasado como argumento.
 
  * En otro caso retorna NULL sin hacer nada más.
  */
 static char* parse_word_and_end(char** input) {
+	char* start = *input;
 	char* space = strchr(*input, ' ');
 
 	if (space)
@@ -201,7 +204,7 @@ static char* parse_word_and_end(char** input) {
 
 	*input = end + 1;
 
-	return end;
+	return start;
 }
 
 /*
@@ -240,7 +243,7 @@ static int parse_line(text_state_machine_t* state_machine) {
 	case Get:
 		if (!(key = parse_word_and_space(&input)))
 			return 0;
-
+		
 		get(state_machine->database, key, state_machine->file_descriptor);
 		break;
 
@@ -276,9 +279,9 @@ static int parse_line(text_state_machine_t* state_machine) {
  */
 static void remove_line(text_state_machine_t* state_machine, size_t line_length) {
 	if (state_machine->read_characters > line_length)
-		state_machine->read_characters -= line_length;
+		memmove(state_machine->buffer, state_machine->buffer + line_length, state_machine->read_characters - line_length);
 
-	memmove(state_machine->buffer, state_machine->buffer + line_length, state_machine->read_characters);
+	state_machine->read_characters -= line_length;
 }
 
 /*
