@@ -1,5 +1,9 @@
 #pragma once
 
+/*
+ * Códigos para representar comandos a la base de datos,
+ * como también los diferentes tipos de errores.
+ */
 typedef enum {
 	Nothing,
 	Put = 11,

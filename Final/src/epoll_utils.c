@@ -16,7 +16,7 @@ static void client_state_machine_init(fdinfo_list_t* fdinfo, Cli_type cli_type, 
 		bin_state_machine_init(&fdinfo->bin_state_machine, fdinfo->fd, database);
 
 	if (cli_type == Text)
-		txt_state_machine_init(&fdinfo->txt_state_machine, fdinfo->fd, database);
+		text_state_machine_init(&fdinfo->text_state_machine, fdinfo->fd, database);
 }
 
 fdinfo_list_t* poll_socket(int socket, int epfd, Sock_type sock_type, Cli_type cli_type, database_t* database) {
@@ -108,7 +108,7 @@ static void handle_client(int epfd, struct epoll_event event, fdinfo_list_t* fdi
 	if (event.events & EPOLLIN && !is_hup_event(event.events)) {
 
 		if (fdinfo->cli_type == Text)
-			ret_value = can_read_txt(&fdinfo->txt_state_machine);
+			ret_value = text_state_machine_advance(&fdinfo->text_state_machine);
 
 		if (fdinfo->cli_type == Binary)
 			ret_value = bin_state_machine_advance(&fdinfo->bin_state_machine);

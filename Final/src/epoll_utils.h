@@ -24,7 +24,7 @@ typedef struct fdinfo {
 	Sock_type sock_type;
 	int fd;
 	bin_state_machine_t bin_state_machine;
-	txt_state_machine_t txt_state_machine;
+	text_state_machine_t text_state_machine;
 	struct fdinfo* next;
 	struct fdinfo* prev;
 } fdinfo_list_t;

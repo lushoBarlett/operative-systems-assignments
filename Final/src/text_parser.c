@@ -1,4 +1,5 @@
 #include "text_parser.h"
+
 #include <string.h>
 #include <stdlib.h>
 #include <assert.h>
@@ -10,24 +11,16 @@
 #include "database.h"
 #include "blob.h"
 
-#define MAX_BUF_SIZE 2048
-
-void txt_state_machine_init(txt_state_machine_t* state_machine, int fd, database_t* database) {
-	state_machine->read_characters = 0;
-	state_machine->fd = fd;
-	state_machine->database = database;
+static void reply_with_string(char* string, int length, int file_descriptor) {
+	write(file_descriptor, string, length);
 }
 
-static void reply_with_str(char* str, int str_len, int fd) {
-	write(fd, str, str_len);
-}
+static void reply_with_blob(blob_t blob, int file_descriptor) {
+	char response[2048] = "OK ";
 
-static void reply_with_blob(blob_t value, int fd) {
-	char response[2048] = { 'O', 'K', ' ' };
+	size_t limit = blob.bytes <= 2044 ? blob.bytes : 2044;
 
-	size_t limit = value.bytes <= 2044 ? value.bytes : 2044;
-
-	char* memory = value.memory;
+	char* memory = blob.memory;
 
 	size_t i = 3;	
 
@@ -36,12 +29,12 @@ static void reply_with_blob(blob_t value, int fd) {
 
 	response[i++] = '\n';
 
-	write(fd, response, i);
+	write(file_descriptor, response, i);
 }
 
-static int record_to_string(record_t record, char* str, int size) {
+static int record_to_string(record_t record, char* buffer, int max_length) {
 	return snprintf(
-		str, size,
+		buffer, max_length,
 		"OK PUTS=%ld DELS=%ld GETS=%ld TAKES=%ld KEYS=%ld BYTES=%ld\n",
 		record.puts,
 		record.dels,
@@ -52,26 +45,32 @@ static int record_to_string(record_t record, char* str, int size) {
 	);
 }
 
-static void reply_with_record(record_t record, int fd) {
-	char response[2048];
+static void reply_with_record(record_t record, int file_descriptor) {
+	char response[256];
 
-	int written_count = record_to_string(record, response, 2048);
+	int written_count = record_to_string(record, response, 256);
 
-	if (written_count >= 2048)
-		reply_with_str("EBIG\n", 4, fd);
-	else
-		write(fd, response, written_count);
+	write(file_descriptor, response, written_count);
 }
 
-static void require_put(database_t* database, char* key, char* value, int fd) {
+static void put(database_t* database, const char* key, const char* value, int file_descriptor) {
+	size_t key_size = strlen(key);
+	size_t value_size = strlen(value);
+
+	char* key_copy = database_memsafe_malloc(database, sizeof(char) * key_size);
+	strcpy(key_copy, key);
+
+	char* value_copy = database_memsafe_malloc(database, sizeof(char) * value_size);
+	strcpy(value_copy, value);
+
 	blob_t key_blob = {
-		.memory = key,
-		.bytes = strlen(key)
+		.memory = key_copy,
+		.bytes = key_size
 	};
 
 	blob_t value_blob = {
-		.memory = value,
-		.bytes = strlen(value)
+		.memory = value_copy,
+		.bytes = value_size
 	};
 
 	bucket_t* bucket = database_memsafe_malloc(database, sizeof(bucket_t));
@@ -80,10 +79,10 @@ static void require_put(database_t* database, char* key, char* value, int fd) {
 
 	database_put(database, bucket);
 
-	reply_with_str("OK\n", 3, fd);
+	reply_with_string("OK\n", 3, file_descriptor);
 }
 
-static void require_get(database_t* database, char* key, int fd) {
+static void get(database_t* database, char* key, int file_descriptor) {
 	blob_t key_blob = {
 		.memory = key,
 		.bytes = strlen(key)
@@ -92,15 +91,15 @@ static void require_get(database_t* database, char* key, int fd) {
 	bucket_t* bucket = database_get(database, key_blob);
 
 	if (bucket) {
-		reply_with_blob(bucket->value, fd);
+		reply_with_blob(bucket->value, file_descriptor);
 
 		bucket_dereference(bucket);
 	} else {
-		reply_with_str("ENOTFOUND\n", 10, fd);
+		reply_with_string("ENOTFOUND\n", 10, file_descriptor);
 	}
 }
 
-static void require_take(database_t* database, char* key, int fd) {
+static void take(database_t* database, char* key, int file_descriptor) {
 	blob_t key_blob = {
 		.memory = key,
 		.bytes = strlen(key)
@@ -109,215 +108,260 @@ static void require_take(database_t* database, char* key, int fd) {
 	bucket_t* bucket = database_take(database, key_blob);
 
 	if (bucket) {
-		reply_with_blob(bucket->value, fd);
+		reply_with_blob(bucket->value, file_descriptor);
 
 		bucket_dereference(bucket);
 	} else {
-		reply_with_str("ENOTFOUND\n", 10, fd);
+		reply_with_string("ENOTFOUND\n", 10, file_descriptor);
 	}
 }
 
-static void require_del(database_t* database, char* key, int fd) {
+static void del(database_t* database, char* key, int file_descriptor) {
 	blob_t key_blob = {
 		.memory = key,
 		.bytes = strlen(key)
 	};
 	
-	int found = database_delete(database, key_blob);
-
-	if (found)
-		reply_with_str("OK\n", 3, fd);
+	if (database_delete(database, key_blob))
+		reply_with_string("OK\n", 3, file_descriptor);
 	else
-		reply_with_str("ENOTFOUND\n", 10, fd);
+		reply_with_string("ENOTFOUND\n", 10, file_descriptor);
 }
 
-static void require_stats(database_t* database, int fd) {
+static void stats(database_t* database, int file_descriptor) {
 	record_t record = database_stats(database);
 
-	reply_with_record(record, fd);
+	reply_with_record(record, file_descriptor);
 }
 
-// Returns 0 when no command matches, otherwise returns command length
-static int set_command(char* buf, Code* code) {
-	int command_length = 0;
+/*
+ * Intenta interpretar alguno de los nombres de acciones.
 
-	if (!strcmp(buf, "STATS")) {
-		*code = Stats;
-		command_length = 5;
+ * Al conseguirlo avanza el puntero pasado como argumento y retorna
+ * el código correspondiente, sino no hace nada y retorna el código Nothing
+ */
+static Code parse_code(char** input) {
+	if (strncmp(*input, "STATS", 5)) {
+		*input += 5;
+		return Stats;
 
-	} else if (!strncmp(buf, "PUT ", 4)) {
-		*code = Put;
-		command_length = 4;
+	} else if (!strncmp(*input, "PUT ", 4)) {
+		*input += 4;
+		return Put;
 
-	} else if (!strncmp(buf, "GET ", 4)) {
-		*code = Get;
-		command_length = 4;
+	} else if (!strncmp(*input, "GET ", 4)) {
+		*input += 4;
+		return Get;
 
-	} else if (!strncmp(buf, "DEL ", 4)) {
-		*code = Del;
-		command_length = 4;
+	} else if (!strncmp(*input, "DEL ", 4)) {
+		*input += 4;
+		return Del;
 
-	} else if (!strncmp(buf, "TAKE ", 5)) {
-		*code = Take;
-		command_length = 5;
+	} else if (!strncmp(*input, "TAKE ", 5)) {
+		*input += 5;
+		return Take;
 	}
 
-	return command_length;
+	return Nothing;
 }
 
-static int get_key_length(char* key) {
-	char* next_space = strchr(key, ' ');
+/*
+ * Indica dónde está el final de palabra,
+ * solamente en el caso en que luego siga otra
+ * y avanza el puntero pasado como argumento.
 
-	if (!next_space)
+ * En otro caso retorna NULL sin hacer nada más.
+ */
+static char* parse_word_and_space(char** input) {
+	char* space = strchr(*input, ' ');
+
+	if (space) {
+		*space = 0;
+
+		*input = space + 1;
+	}
+
+	return space;
+}
+
+/*
+ * Indica dónde está el final de la línea,
+ * solamente en el caso en que no haya un espacio antes
+ * y avanza el puntero pasado como argumento.
+
+ * En otro caso retorna NULL sin hacer nada más.
+ */
+static char* parse_word_and_end(char** input) {
+	char* space = strchr(*input, ' ');
+
+	if (space)
+		NULL;
+
+	char* end = strchr(*input, '\0');
+
+	*input = end + 1;
+
+	return end;
+}
+
+/*
+ * Interpreta una acción completa, de acuerdo al código de acción
+ * que figure en el buffer de la máquina de estado.
+ * 
+ * El caso donde no se identifique ningún código retorna como 0.
+ * 
+ * En cualquier otro caso, se intenta avanzar por las etapas
+ * correspondientes a la acción, leyendo cada uno de los campos
+ * especificados por el estándar.
+ * 
+ * En caso de un error de interpretación, retorna prematuramente con 0.
+ */
+static int parse_line(text_state_machine_t* state_machine) {
+	
+	char* input = state_machine->buffer;
+	char* key;
+	char* value;
+	
+	switch (parse_code(&input)) {
+
+	case Nothing:
 		return 0;
 
-	return next_space - key;
-}
-
-static char* create_string_from(database_t* database, char* string, int length) {
-	char* result = database_memsafe_malloc(database, sizeof(char) * (length + 1));
-
-	strncpy(result, string, length);
-
-	return result;
-}
-
-static char* require_last_key(database_t* database, char* buffer, int read_chars, int length) {
-	char* key_ref = buffer + read_chars;
-
-	if (strchr(key_ref, ' '))
-		return NULL;
-
-	int key_length = length - read_chars;
-
-	return create_string_from(database, key_ref, key_length);
-}
-
-static void string_move_to_beginning(char* string, int offset, int length) {
-	memmove(string, string + offset, length - offset);
-}
-
-static void handle_put(txt_state_machine_t* state_machine, int read_chars, int buf_len) {
-	if (read_chars >= buf_len)
-		return;
-
-	char* key_ref = state_machine->buf + read_chars;
-
-	int key_length = get_key_length(key_ref);
-
-	read_chars += key_length + 1;
-
-	if (!key_length || read_chars >= buf_len)
-		return;
-
-	char* value = require_last_key(state_machine->database, state_machine->buf, read_chars, buf_len);
-
-	if (!value)
-		return;
-
-	char* key = create_string_from(state_machine->database, key_ref, key_length);
-
-	require_put(state_machine->database, key, value, state_machine->fd);
-}
-
-static void handle_one_argument_command(txt_state_machine_t* state_machine, int read_chars, int buf_len, command_handler f) {
-	if (read_chars >= buf_len)
-		return;
-
-	char* key = require_last_key(state_machine->database, state_machine->buf, read_chars, buf_len);
-
-	if (key)
-		f(state_machine->database, key, state_machine->fd);
-}
-
-static void parse_line(txt_state_machine_t* state_machine, int buf_len) {
-	
-	Code code;
-	
-	int read_chars = set_command(state_machine->buf, &code);
-
-	if (!read_chars)
-		return;
-
-	switch (code) {
 	case Put:
-		handle_put(state_machine, read_chars, buf_len);
+		if (!(key = parse_word_and_space(&input)))
+			return 0;
+
+		if (!(value = parse_word_and_end(&input)))
+			return 0;
+
+		put(state_machine->database, key, value, state_machine->file_descriptor);
 		break;
 
 	case Get:
-		handle_one_argument_command(state_machine, read_chars, buf_len, require_get);
+		if (!(key = parse_word_and_space(&input)))
+			return 0;
+
+		get(state_machine->database, key, state_machine->file_descriptor);
 		break;
 
 	case Del:
-		handle_one_argument_command(state_machine, read_chars, buf_len, require_del);
+		if (!(key = parse_word_and_space(&input)))
+			return 0;
+
+		del(state_machine->database, key, state_machine->file_descriptor);
 		break;
 
 	case Take:
-		handle_one_argument_command(state_machine, read_chars, buf_len, require_take);
+		if (!(key = parse_word_and_space(&input)))
+			return 0;
+
+		take(state_machine->database, key, state_machine->file_descriptor);
 		break;
 
 	case Stats:
-		require_stats(state_machine->database, state_machine->fd);
+		stats(state_machine->database, state_machine->file_descriptor);
 		break;
 
 	default:
 	 	// TODO: handle error cases
 		abort();
 	}
-}
-
-static void delete_first_line(txt_state_machine_t* state_machine, int line_length) {
-	if (state_machine->read_characters > line_length)
-		string_move_to_beginning(state_machine->buf, line_length, state_machine->read_characters);
-
-	state_machine->read_characters -= line_length;
-}
-
-static int parse_recv(txt_state_machine_t* state_machine) {
-	char* new_line = strchr(state_machine->buf, '\n');
-
-	if (!new_line)
-		return (state_machine->read_characters < MAX_BUF_SIZE);
-
-	*new_line = 0;
-
-	int line_length = new_line - state_machine->buf + 1;
-
-	parse_line(state_machine, line_length - 1);
-
-	delete_first_line(state_machine, line_length);
-
-	if (state_machine->read_characters)
-		parse_recv(state_machine);
 
 	return 1;
 }
 
-int can_read_txt(txt_state_machine_t* state_machine) {
-	char* dest = state_machine->buf + state_machine->read_characters;
+/*
+ * Borra la línea al principio del buffer y mueve el resto de los caracteres
+ * no leídos al principio
+ */
+static void remove_line(text_state_machine_t* state_machine, size_t line_length) {
+	if (state_machine->read_characters > line_length)
+		state_machine->read_characters -= line_length;
 
-	int max_to_read = MAX_BUF_SIZE - state_machine->read_characters;
+	memmove(state_machine->buffer, state_machine->buffer + line_length, state_machine->read_characters);
+}
 
-	int current_read = read(state_machine->fd, dest, max_to_read);
+/*
+ * Lee todos los caracteres que pueda en el buffer, teniendo en cuenta
+ * la cantidad de caracteres que ya han sido leídos hasta el momento.
+ * Actualiza la máquina de estado con la nueva lectura realizada
+ */
+static int read_stream(text_state_machine_t* state_machine) {
+	char* current_dest = state_machine->buffer + state_machine->read_characters;
+
+	int chars_left = MAX_BUFFER_SIZE - state_machine->read_characters;
+
+	int current_read = read(state_machine->file_descriptor, current_dest, chars_left);
 
 	// TODO: handle error when EINTR
 	if (current_read < 0 && (errno == EAGAIN || errno == EWOULDBLOCK))
-		return 1;
+		return 0;
 
 	if (current_read < 0)
-		return 0;
+		return -1;
 
 	state_machine->read_characters += current_read;
 
-	int buf_is_full = state_machine->read_characters == MAX_BUF_SIZE;
+	return 1;
+}
 
-	int parse_ret = parse_recv(state_machine);
+/*
+ * Indica dónde está el final de la línea, y la marca
+ * como final de string. Retorna el tamaño de la línea sumado al caracter final
+ */
+static int line_end(text_state_machine_t* state_machine) {
+	char* end_of_line = strchr(state_machine->buffer, '\n');
 
-	if (!parse_ret)
-		reply_with_str("EINVAL\n", 7, state_machine->fd);
+	if (!end_of_line)
+		return 0;
 
-	if (buf_is_full)
-		can_read_txt(state_machine);
+	*end_of_line = 0;
+
+	return end_of_line - state_machine->buffer + 1;
+}
+
+static int buffer_is_full(text_state_machine_t* state_machine) {
+	return state_machine->read_characters == MAX_BUFFER_SIZE;
+}
+
+int text_state_machine_advance(text_state_machine_t* state_machine) {
+	/*
+	 * Error al leer el file descriptor resulta en error irrecuperable
+	 */
+	if (read_stream(state_machine) == -1)
+		return -1;
+
+	size_t line_length;
+
+	/*
+	 * Por cada línea que identifiquemos en nuestro buffer vamos a intentar
+	 * interpretarla, y de no poder hacerlo responder con mensaje inválido.
+	 * 
+	 * En cualquier caso removemos la línea del buffer para continuar con
+	 * las que queden.
+	 */
+	while ((line_length = line_end(state_machine))) {
+		if (!parse_line(state_machine))
+			reply_with_string("EINVAL\n", 7, state_machine->file_descriptor);
+
+		remove_line(state_machine, line_length);
+	}
+
+	/*
+	 * Si el buffer está lleno después de haber intentado interpretar
+	 * líneas, significa que el mensaje es muy grande y esto
+	 * es un error irrecuperable
+	 */
+	if (buffer_is_full(state_machine))
+		return -1;
 
 	return 1;
+}
+
+void text_state_machine_init(text_state_machine_t* state_machine, int file_descriptor, database_t* database) {
+	state_machine->read_characters = 0;
+
+	state_machine->file_descriptor = file_descriptor;
+
+	state_machine->database = database;
 }
