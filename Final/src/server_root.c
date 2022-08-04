@@ -94,7 +94,14 @@ char** set_argv(char* argv[], int text_sock, int bin_sock) {
  */
 int main() {
     int text_sock = configure_lsock(888);
+
+    if (text_sock < 0)
+        return 0;
+
     int bin_sock = configure_lsock(889);
+
+    if (bin_sock < 0)
+        return 0;
 
     if (!change_user())
         return 0;
