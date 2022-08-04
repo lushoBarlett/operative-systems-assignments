@@ -2,6 +2,10 @@
 
 #include <stdlib.h>
 
+/*
+ * Borra el bucket que está al frente de la LRU
+ * de no haber ninguno habrá segfault
+ */
 static void free_one_bucket(database_t* database) {
 	lru_queue_lock(&database->lru_queue);
 
