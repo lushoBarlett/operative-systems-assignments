@@ -1,6 +1,7 @@
 #include "server_utils.h"
 
 #define RETURN_IF_NEGATIVE(N) ({if (N < 0) return N;})
+#define MAX_EVENTS 10
 
 /*
  * Retorna la cantidad de cores disponibles
@@ -128,10 +129,10 @@ static void thread_args_destroy(thread_args_t* thread_args, int epfd) {
 static void service(int epfd, pthread_mutex_t* lock, fdinfo_list_t** head_ptr, database_t* database) {
 	int stop = 0;
 
-	struct epoll_event event;	
+	struct epoll_event event[MAX_EVENTS];	
 
 	while (!stop) {
-		int n = epoll_wait(epfd, &event, 10, -1);
+		int n = epoll_wait(epfd, event, MAX_EVENTS, -1);
 
 		if (n < 0 && errno != EINTR)
 			stop = 1;
@@ -142,7 +143,7 @@ static void service(int epfd, pthread_mutex_t* lock, fdinfo_list_t** head_ptr, d
 		 * porque no esta marcado con EPOLLONESHOT
 		 */
 		for (size_t i = 0; i < (size_t)n && !stop; i++)
-			if (handle_event(epfd, event, head_ptr, lock, database) == -1)
+			if (handle_event(epfd, event[i], head_ptr, lock, database) == -1)
 				stop = 1;
 	}
 }

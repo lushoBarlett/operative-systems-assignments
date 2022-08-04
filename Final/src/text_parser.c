@@ -294,7 +294,13 @@ static void remove_line(text_state_machine_t* state_machine, size_t line_length)
 static int read_stream(text_state_machine_t* state_machine) {
 	char* current_dest = state_machine->buffer + state_machine->read_characters;
 
-	int chars_left = MAX_BUFFER_SIZE - state_machine->read_characters;
+	/*
+	 * Podemos leer el maximo menos 1 porque debemos reservar espacio
+	 * para \0 al final
+	 * Si no lo hacemos, cuando buscamos el final de una línea (\n) y no
+	 * haya salto de línea leerá basura.
+	 */
+	int chars_left = (MAX_BUFFER_SIZE - 1) - state_machine->read_characters;
 
 	int current_read;
 
@@ -316,7 +322,13 @@ reading:
 
 	state_machine->read_characters += current_read;
 
+	state_machine->buffer[state_machine->read_characters] = 0;
+
 	return 1;
+}
+
+static int buffer_is_full(text_state_machine_t* state_machine) {
+	return state_machine->read_characters == MAX_BUFFER_SIZE;
 }
 
 /*
@@ -332,10 +344,6 @@ static int line_end(text_state_machine_t* state_machine) {
 	*end_of_line = 0;
 
 	return end_of_line - state_machine->buffer + 1;
-}
-
-static int buffer_is_full(text_state_machine_t* state_machine) {
-	return state_machine->read_characters == MAX_BUFFER_SIZE;
 }
 
 int text_state_machine_advance(text_state_machine_t* state_machine) {
@@ -371,8 +379,7 @@ int text_state_machine_advance(text_state_machine_t* state_machine) {
 		 * En cualquier caso removemos la línea del buffer para continuar con
 		 * las que queden.
 		 */
-		while ((line_length = line_end(state_machine)))
-		{
+		while ((line_length = line_end(state_machine))) {
 			if (!parse_line(state_machine))
 				reply_with_string("EINVAL\n", 7, state_machine->file_descriptor);
 
