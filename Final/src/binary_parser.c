@@ -32,13 +32,12 @@ typedef enum {
 static int record_to_string(record_t record, char* dest, int max_length) {
 	return snprintf(
 		dest, max_length,
-		"PUTS=%ld DELS=%ld GETS=%ld TAKES=%ld KEYS=%ld BYTES=%ld\n",
+		"PUTS=%ld DELS=%ld GETS=%ld TAKES=%ld KEYS=%ld\n",
 		record.puts,
 		record.dels,
 		record.gets,
 		record.takes,
-		record.keys,
-		record.bytes
+		record.keys
 	);
 }
 

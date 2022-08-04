@@ -35,13 +35,12 @@ static void reply_with_blob(blob_t blob, int file_descriptor) {
 static int record_to_string(record_t record, char* buffer, int max_length) {
 	return snprintf(
 		buffer, max_length,
-		"OK PUTS=%ld DELS=%ld GETS=%ld TAKES=%ld KEYS=%ld BYTES=%ld\n",
+		"OK PUTS=%ld DELS=%ld GETS=%ld TAKES=%ld KEYS=%ld\n",
 		record.puts,
 		record.dels,
 		record.gets,
 		record.takes,
-		record.keys,
-		record.bytes
+		record.keys
 	);
 }
 
@@ -57,10 +56,10 @@ static void put(database_t* database, const char* key, const char* value, int fi
 	size_t key_size = strlen(key);
 	size_t value_size = strlen(value);
 
-	char* key_copy = database_memsafe_malloc(database, sizeof(char) * key_size);
+	char* key_copy = database_memsafe_malloc(database, sizeof(char) * (key_size + 1));
 	strcpy(key_copy, key);
 
-	char* value_copy = database_memsafe_malloc(database, sizeof(char) * value_size);
+	char* value_copy = database_memsafe_malloc(database, sizeof(char) * (value_size + 1));
 	strcpy(value_copy, value);
 
 	blob_t key_blob = {
