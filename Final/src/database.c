@@ -205,7 +205,7 @@ int database_delete(database_t* database, blob_t key) {
 }
 
 record_t database_stats(database_t* database) {
-	return report(&database->record);
+	return report(&database->record, counter_get(&database->size));
 }
 
 void* database_memsafe_malloc(database_t* database, size_t bytes) {
