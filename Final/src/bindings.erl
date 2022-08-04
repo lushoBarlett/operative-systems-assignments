@@ -2,11 +2,28 @@
 -import('sync', [createLock/0, lock/1, unlock/1, destroyLock/1]).
 -export([start/0, put/3, get/2, take/2, del/2, stats/1, stop/1]).
 
+%% Conecta al puerto 889 en modo pasivo y binario
+%% 
+%% Retorna un socket y un lock para que los mensajes
+%% que se envian y reciben no se mezclen porque puede
+%% haber varios threads ejecutando operaciones
 start() ->
-	{ok, Sock} = gen_tcp:connect("localhost", 8001, [{active, false}, binary]),
+	{ok, Sock} = gen_tcp:connect("localhost", 889, [{active, false}, binary]),
 	Lock = createLock(),
 	{Sock, Lock}.
 
+%%
+%% Cierra el puerto y destruye el lock
+%%
+stop({Port, Lock}) ->
+	gen_tcp:close(Port),
+	destroyLock(Lock),
+	ok.
+
+%%
+%% Convierte un entero en su representacion binaria big endian
+%% de cuatro bytes
+%%
 integerTo4Bytes(Int) ->
 	Bin = binary:encode_unsigned(Int),
 	case byte_size(Bin) of
@@ -17,6 +34,11 @@ integerTo4Bytes(Int) ->
 		_N -> throw("integer is too big")
 	end.
 
+%%
+%% Dados un socket, un binario y una cantidad de bytes
+%% por leer, lee del socket esa cantidad o menos y los
+%% agrega al binario. En caso de error retorna error
+%%
 readMore(Socket, Bytes, BytesToRead) ->
 	case gen_tcp:recv(Socket, BytesToRead) of
 		{ok, Packet} ->
@@ -25,6 +47,10 @@ readMore(Socket, Bytes, BytesToRead) ->
 			error
 	end.
 
+%%
+%% Recibe una cantidad de bytes para leer y los agrega a los bytes
+%% Si esa cantidad es 0 simplemente retorna los bytes
+%%
 getValue(Socket, Bytes, BytesToRead) ->
 	case BytesToRead of
 		0 ->
@@ -33,6 +59,14 @@ getValue(Socket, Bytes, BytesToRead) ->
 			readMore(Socket, Bytes, BytesToRead)
 	end.
 
+%%
+%% Parsea un argumento que tiene la longitud y el valor en binario
+%%
+%% Si los bytes no alcanzan para armar un entero de 4 bytes, lee mas
+%%
+%% Si no, interpreta los primeros 4 bytes como la longitud, e intenta
+%% leer y retornar esa cantidad de bytes
+%%
 parseArgument(Socket, Bytes) ->
 	BytesLength = byte_size(Bytes),
 	if
@@ -51,6 +85,9 @@ parseArgument(Socket, Bytes) ->
 			end
 	end.
 
+%%
+%% Dados bytes de respuesta del servidor los interpreta
+%%
 decode(Socket, Bytes) ->
 	case Bytes of
 		<<101, Rest/binary>> -> 
@@ -61,6 +98,11 @@ decode(Socket, Bytes) ->
 			error
 	end.
 
+%%
+%% Lee del socket para recibir la respuesta del servidor
+%% en caso de error, cierra la conexion.
+%% Retorna {ok, valor en binario}
+%%
 recvAnswer(Socket) ->
 	case gen_tcp:recv(Socket, 0) of
 		{ok, Packet} ->
@@ -70,6 +112,9 @@ recvAnswer(Socket) ->
 			error
 	end.
 
+%%
+%% Lee un byte del socket e interpreta el codigo
+%%
 recvCode(Socket) ->
 	case gen_tcp:recv(Socket, 0) of
 		{ok, <<101>>} -> ok;
@@ -77,6 +122,10 @@ recvCode(Socket) ->
 		true -> error
 	end.
 
+%%
+%% Transforma los términos a binarios y guarda esos valores en la cache.
+%% Luego para obtenerlos se hace el proceso inverso.
+%%
 put({Sock, Lock}, Key, Value) ->
 	BinKey = term_to_binary(Key),
 	BinValue = term_to_binary(Value),
@@ -142,8 +191,3 @@ stats({Sock, Lock}) ->
 	unlock(Lock),
 
 	R.
-
-stop({Port, Lock}) ->
-	gen_tcp:close(Port),
-	destroyLock(Lock),
-	ok.
