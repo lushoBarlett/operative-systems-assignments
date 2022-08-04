@@ -294,9 +294,18 @@ static int read_stream(text_state_machine_t* state_machine) {
 
 	int chars_left = MAX_BUFFER_SIZE - state_machine->read_characters;
 
-	int current_read = read(state_machine->file_descriptor, current_dest, chars_left);
+	int current_read;
 
-	// TODO: handle error when EINTR
+reading:
+	current_read = read(state_machine->file_descriptor, current_dest, chars_left);
+
+	/*
+	 * Si el read falló por una señal antes de llegar a leer algo
+	 * vuelve a realizar el read
+	 */
+	if (current_read < 0 && (errno == EINTR))
+		goto reading;
+
 	if (current_read < 0 && (errno == EAGAIN || errno == EWOULDBLOCK))
 		return 0;
 

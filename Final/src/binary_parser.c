@@ -157,9 +157,18 @@ static Result read_n(bin_state_machine_t* state_machine, uint8_t* dest, size_t n
 
 	uint8_t bytes_left = n - state_machine->read_characters;
 
-	int current_read = read(state_machine->file_descriptor, current_dest, bytes_left);
+	int current_read;
 
-	// TODO: handle error when EINTR
+reading:
+	current_read = read(state_machine->file_descriptor, current_dest, bytes_left);
+
+	/*
+	 * Si el read falló por una señal antes de llegar a leer algo
+	 * vuelve a realizar el read
+	 */
+	if (current_read < 0 && (errno == EINTR))
+		goto reading;
+
 	if (current_read < 0 && (errno == EAGAIN || errno == EWOULDBLOCK))
 		return Processing;
 
@@ -273,19 +282,34 @@ static Result parse_value(bin_state_machine_t* state_machine) {
 
 /*
  * Reinicia todos los valores que la máquina de estado utiliza para recordar
- * el estado de su proceso, liberando primero la memoria de la clave y el
- * valor si la hubiere.
+ * el estado de su proceso.
  */
 static void bin_state_machine_reset(bin_state_machine_t* state_machine) {
 	state_machine->code = Nothing;
 	state_machine->state = ReadingCode;
 
-	free(state_machine->key);
-	free(state_machine->value);
-
 	state_machine->key = state_machine->value = NULL;
 
 	state_machine->read_characters = state_machine->key_length = state_machine->value_length = 0;
+}
+
+/*
+ * Reinicia los valores de la máquina de estados y libera la memoria de la clave
+ * y el valor si estos no son NULL.
+ * 
+ * No seria necesario liberar el value porque los comandos que utilizan
+ * esta funcion tienen solo llave. Se libera porque puede que el comando
+ * put falle (y haya que cortar la conexion) al leer su valor ya habiendole
+ * asignado memoria.
+ */
+static void bin_state_machine_rollback(bin_state_machine_t* state_machine) {
+	if (state_machine->key)
+		free(state_machine->key);
+
+	if (state_machine->value)
+		free(state_machine->value);
+
+	bin_state_machine_reset(state_machine);
 }
 
 /*
@@ -321,21 +345,21 @@ static Result dispatch_action(bin_state_machine_t* state_machine) {
 		FINISH_OR_RETURN(parse_key_length(state_machine));
 		FINISH_OR_RETURN(parse_key(state_machine));
 		get(state_machine);
-		bin_state_machine_reset(state_machine);
+		bin_state_machine_rollback(state_machine);
 		break;
 
 	case Del:
 		FINISH_OR_RETURN(parse_key_length(state_machine));
 		FINISH_OR_RETURN(parse_key(state_machine));
 		del(state_machine);
-		bin_state_machine_reset(state_machine);
+		bin_state_machine_rollback(state_machine);
 		break;
 
 	case Take:
 		FINISH_OR_RETURN(parse_key_length(state_machine));
 		FINISH_OR_RETURN(parse_key(state_machine));
 		take(state_machine);
-		bin_state_machine_reset(state_machine);
+		bin_state_machine_rollback(state_machine);
 		break;
 
 	case Stats:
@@ -359,7 +383,7 @@ int bin_state_machine_advance(bin_state_machine_t* state_machine) {
 	 * no la va a usar, y no tuvo oportunidad de liberarla.
 	 */
 	if (result == Error)
-		bin_state_machine_reset(state_machine);
+		bin_state_machine_rollback(state_machine);
 
 	return result != Error;
 }
