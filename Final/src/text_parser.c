@@ -266,8 +266,7 @@ static int parse_line(text_state_machine_t* state_machine) {
 		break;
 
 	default:
-	 	// TODO: handle error cases
-		abort();
+		return 0;
 	}
 
 	return 1;
@@ -288,6 +287,10 @@ static void remove_line(text_state_machine_t* state_machine, size_t line_length)
  * Lee todos los caracteres que pueda en el buffer, teniendo en cuenta
  * la cantidad de caracteres que ya han sido leídos hasta el momento.
  * Actualiza la máquina de estado con la nueva lectura realizada
+ * 
+ * Si pudo leer algo, retorna 1.
+ * Si no había nada por leer retorna 0.
+ * En caso de error retorna -1.
  */
 static int read_stream(text_state_machine_t* state_machine) {
 	char* current_dest = state_machine->buffer + state_machine->read_characters;
@@ -337,36 +340,59 @@ static int buffer_is_full(text_state_machine_t* state_machine) {
 }
 
 int text_state_machine_advance(text_state_machine_t* state_machine) {
-	/*
-	 * Error al leer el file descriptor resulta en error irrecuperable
-	 */
-	if (read_stream(state_machine) == -1)
-		return 0;
+	int keep_reading = 1;
 
-	size_t line_length;
+	while (keep_reading > 0) {
 
-	/*
-	 * Por cada línea que identifiquemos en nuestro buffer vamos a intentar
-	 * interpretarla, y de no poder hacerlo responder con mensaje inválido.
-	 * 
-	 * En cualquier caso removemos la línea del buffer para continuar con
-	 * las que queden.
-	 */
-	while ((line_length = line_end(state_machine))) {
-		if (!parse_line(state_machine))
-			reply_with_string("EINVAL\n", 7, state_machine->file_descriptor);
+		/*
+		 * Si al intentar leer hubo error es irrecuperable y retorno 0.
+		 * Si no había nada que leer retorno 1.
+		 * Si anduvo correctamente sigo ejecutando
+		 */
+		int read_result = read_stream(state_machine);
 
-		remove_line(state_machine, line_length);
+		if (read_result == -1)
+			return 0;
+
+		if (read_result == 0)
+			return 1;
+
+		/*
+		 * Guardo si el buffer se llenó al leer, lo que indica que
+		 * debería volver a leer más.
+		 */
+		int filled_buffer = buffer_is_full(state_machine);
+
+		size_t line_length;
+
+		/*
+		 * Por cada línea que identifiquemos en nuestro buffer vamos a intentar
+		 * interpretarla, y de no poder hacerlo responder con mensaje inválido.
+		 *
+		 * En cualquier caso removemos la línea del buffer para continuar con
+		 * las que queden.
+		 */
+		while ((line_length = line_end(state_machine)))
+		{
+			if (!parse_line(state_machine))
+				reply_with_string("EINVAL\n", 7, state_machine->file_descriptor);
+
+			remove_line(state_machine, line_length);
+		}
+
+		/*
+		 * Si el buffer está lleno después de haber intentado interpretar
+		 * líneas, significa que el mensaje es muy grande y esto
+		 * es un error irrecuperable
+		 * Si no, si antes de parsear líneas se había llenado, seguiremos
+		 * leyendo. Porque pudo haber un mensaje que haya quedado sin leer
+		 * por no haber espacio en el buffer.
+		 */
+		if (buffer_is_full(state_machine))
+			return 0;
+		else
+			keep_reading = filled_buffer;
 	}
-
-	/*
-	 * Si el buffer está lleno después de haber intentado interpretar
-	 * líneas, significa que el mensaje es muy grande y esto
-	 * es un error irrecuperable
-	 */
-	if (buffer_is_full(state_machine))
-		return 0;
-
 	return 1;
 }
 
