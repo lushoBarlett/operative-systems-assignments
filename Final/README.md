@@ -16,7 +16,7 @@ Dentro de la carpeta `./bin` se encuentran los dos programas, para correrlos sim
 
 ```shell
 > ./bin/tests
-> ./bin/memcache
+> sudo ./bin/memcache
 ```
 Los tests que limitan la memoria no se llevan bien con `valgrind`, así que comentarlos es imperativo para revisar que no haya _memory leaks_. Por otro lado `valgrind` no se lleva bien con el _multithreading_, porque lo serializa, y hay tests que tardan una eternidad en finalizar. Nosotros testeamos con y sin `valgrind` quitando los tests adecuados para revisar que no haya _memory leaks_, pero la forma natural de correr los tests es así nomás.
 
@@ -106,4 +106,50 @@ Así que eso fue el final, el Backend funcionaba, y funciona. _Fingers crossed_
 ---
 #### Frontend
 
-// Completar
+Comenzamos el frontend con una implementación básica de lo que sería un servidor que simplemente aceptaba conexiones y las metía a la lista de interés de `epoll` para manejar eventos. La idea era que éste se encargue de leer lo que se haya escrito y se lo pase a distintas componentes que puedan parsear lo que fueran esos datos.
+
+###### fdinfo
+
+Por cada cliente nuevo tendremos que guardar cierta información, que veremos luego, en una estructura. `fdinfo` será la que utilizamos para ello.
+
+###### Primer parser de texto
+
+La idea inicial era intentar abarcar la mayor cantidad de casos posibles utilizando lo mínimo de memoria posible. Así surgió que podíamos implementar un `buffer circular` en el que el `parser` simplemente concatenaba allí. Cuando encontrábamos una línea la parseabamos buscando las últimas tres palabras. Esas serían las que representaban el comando. De esta forma teníamos un `parser` que podía recibir todo lo que quisiera y aceptar comandos incluso con basura al comienzo.
+
+###### Parser modo binario
+
+En este caso, no podíamos depender de que el `parser` ya recibiera todo leido en un `buffer`. 
+Necesitamos hacer uso de una `maquina de estados` que fuera leyendo (`reads` no bloqueantes) y guardando los resultados.
+De ahí surge una idea que usaríamos finalmente para ambos que es la de leer hasta llenar un `buffer` o una cierta cantidad de bytes.
+
+###### Nuevo approach al modo texto
+
+Al hacer la `máquina de estados` para el modo binario nos dimos cuenta de que en el otro `parser` estábamos siendo demasiado abarcativos y no muy claros.
+De ahí, cambiamos la forma de parsear texto en la que seguimos los siguientes pasos:
+1. Leemos todo lo posible (lo que quepa en el `buffer`).
+2. Parseamos una línea.
+3. Movemos lo que resta del `buffer` al comienzo (reemplaza la idea de `buffer circular`).
+4. Se siguen parseando líneas hasta no tener más.
+5. Finalmente puede que al leer se haya llenado el `buffer` y había más para parsear, en este caso volvemos al paso 1.
+
+Para parsear una línea vamos marcando los estados en la máquina de estados y además llevamos la cantidad de caracteres leídos.
+
+###### Resumiendo...
+
+Hasta acá teníamos "resuelto" el problema en diferentes capas, la del manejador de eventos (que ya no leía si no que indicaba la posibilidad de hacerlo) y la de los parsers. El manejador cada vez que recibía nuevos clientes les creaba un `fdinfo` en el cual guardábamos tipo de socket, tipo de cliente, sus máquinas de estados, etc... Ahí ibamos a encontrar un problema
+
+###### Memory leaks
+
+Con la implementación actual los parsers tienen la responsabilidad de crear la memoria que se guardará en la base de datos.
+Después de arreglar todos los errores de memoria referidos a eso, nos quedaba uno más.
+Pero antes, teníamos que agregar una forma de cortar el programa de manera "limpia". Pensamos en usar la función `signalfd` que nos crea un file descriptor para recibir señales. Luego lo metimos en la lista de `epoll` y no lo seteamos ONESHOT como a los otros porque cuando ocurre una señal queremos que la reciban todos los threads.
+Ahora que cortamos el programa con una señal, apareció el problema de que puede que queden clientes conectados con estructuras `fdinfo` que no podíamos liberar.
+La solución fue hacer que los `fdinfo` sean una especie de lista doblemente enlazada y que cuando termine el servidor liberemos toda la memoria recorriendo la lista.
+
+###### Bajando privilegios
+
+Para poder bindear sockets a los puertos 888 y 889 el programa se corre en modo root. Ni bien hecho esto, se bajan los privilegios de usuario y grupo al usuario con id 1000. No fue necesario ejecutar un programa separado con execv, ya que esto ya nos garantizó el cambio de usuario.
+
+###### Frontend final
+
+Terminamos con un frontend que asigna a cada cliente nuevo una estructura `fdinfo` que contiene datos del socket, máquina de estados y referencias al siguiente y previo fdinfo. Tiene la responsabilidad de crear la memoria para la base de datos y de desreferenciar lo que recibe de ella tan pronto como la utiliza.
