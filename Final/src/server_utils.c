@@ -1,6 +1,11 @@
 #include "server_utils.h"
 
-#define RETURN_IF_NEGATIVE(N) ({if (N < 0) return N;})
+/*
+ * Retorna la cantidad de cores disponibles
+ */
+static size_t core_count() {
+	return sysconf(_SC_NPROCESSORS_ONLN);
+}
 
 /*
  * Devuelve un file descriptor para recibir la señal SIGINT alli
@@ -18,52 +23,45 @@ static int require_signal_fd() {
 	return sfd;
 }
 
-static int require_socket() {
-	int listen_socket = socket(AF_INET, SOCK_STREAM, 0);
+/*
+ * Crea e inicia los argumentos para pasar a cada thread
+ */
+static thread_args_t* thread_args_create(int epfd, database_t* database) {
+	thread_args_t* thread_args = malloc(sizeof(thread_args_t));
 
-	RETURN_IF_NEGATIVE(listen_socket);
+	if (!thread_args)
+		return NULL;
 
-	int yes = 1;
+	pthread_mutex_init(&thread_args->lock, NULL);
+	
+	thread_args->epfd = epfd;
 
-	int sock_opt_success = setsockopt(listen_socket, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof yes);
+	fdinfo_list_t** head_ptr = malloc(sizeof(fdinfo_list_t*));
 
-	RETURN_IF_NEGATIVE(sock_opt_success);
+	if (!head_ptr) {
+		free(thread_args);
+		pthread_mutex_destroy(&thread_args->lock);
+		return NULL;
+	}
 
-	return listen_socket;
-}
+	*head_ptr = NULL;
+	thread_args->head = head_ptr;
 
-static int require_bind(int listen_socket, int port) {
-	struct sockaddr_in socket_address;
+	thread_args->database = database;
 
-	memset(&socket_address, 0, sizeof socket_address);
-	socket_address.sin_family = AF_INET;
-	socket_address.sin_port = htons(port);
-	socket_address.sin_addr.s_addr = htonl(INADDR_ANY);
-
-	return bind(listen_socket, (const struct sockaddr*)&socket_address, sizeof socket_address);
+	return thread_args;
 }
 
 /*
- * Crea un socket de escucha bindeado al puerto dado
+ * Libera los recursos de los argumentos de los threads y
+ * ademas los de los clientes que quedaron conectados
  */
-static int configure_lsock(int port) {
-	int listen_socket = require_socket();
+static void thread_args_destroy(thread_args_t* thread_args, int epfd) {
+	fdinfo_list_destroy_remaining(epfd, thread_args->head);
 
-	RETURN_IF_NEGATIVE(listen_socket);
+	pthread_mutex_destroy(&thread_args->lock);
 	
-	int bind_success = require_bind(listen_socket, port);
-
-	RETURN_IF_NEGATIVE(bind_success);
-	
-	int listen_success = listen(listen_socket, 10000);
-
-	RETURN_IF_NEGATIVE(listen_success);
-	
-	return listen_socket;
-}
-
-static size_t core_count() {
-	return sysconf(_SC_NPROCESSORS_ONLN);
+	free(thread_args);
 }
 
 /*
@@ -92,6 +90,10 @@ static void service(int epfd, pthread_mutex_t* lock, fdinfo_list_t** head_ptr, d
 	}
 }
 
+/*
+ * Saca los valores de la estructura de argumentos
+ * y llama a la funcion service con ellos
+ */
 static void* service_wrap(void* arg) {
 	thread_args_t* thread_args = (thread_args_t*) arg;
 
@@ -120,42 +122,9 @@ static void join_service_threads(pthread_t* threads, size_t thread_amount) {
 }
 
 /*
- * Crea e inicia los argumentos para pasar al thread
+ * Crea una estructura con los argumentos a pasar a cada thread,
+ * luego los spawnea hasta que finalicen y libera estos argumentos
  */
-static thread_args_t* thread_args_create(int epfd, database_t* database) {
-	thread_args_t* thread_args = malloc(sizeof(thread_args_t));
-
-	if (!thread_args)
-		return NULL;
-
-	pthread_mutex_init(&thread_args->lock, NULL);
-	
-	thread_args->epfd = epfd;
-
-	fdinfo_list_t** head_ptr = malloc(sizeof(fdinfo_list_t*));
-
-	if (!head_ptr) {
-		free(thread_args);
-		pthread_mutex_destroy(&thread_args->lock);
-		return NULL;
-	}
-
-	*head_ptr = NULL;
-	thread_args->head = head_ptr;
-
-	thread_args->database = database;
-
-	return thread_args;
-}
-
-static void thread_args_destroy(thread_args_t* thread_args, int epfd) {
-	fdinfo_list_destroy_remaining(epfd, thread_args->head);
-
-	pthread_mutex_destroy(&thread_args->lock);
-	
-	free(thread_args);
-}
-
 static void service_threads(pthread_t* threads, size_t thread_amount, int epfd, database_t* database) {
 	thread_args_t* thread_args = thread_args_create(epfd, database);
 
@@ -168,44 +137,34 @@ static void service_threads(pthread_t* threads, size_t thread_amount, int epfd, 
 	thread_args_destroy(thread_args, epfd);
 }
 
-static int get_sockets(int* listen_txt_sock, int* listen_bin_sock, int* signalfd) {
-	*listen_txt_sock = configure_lsock(8000);
-
-	RETURN_IF_NEGATIVE(*listen_txt_sock);
-	
-	*listen_bin_sock = configure_lsock(8001);
-
-	if (*listen_bin_sock < 0)
-		goto bin_sock_error;
-
-	*signalfd = require_signal_fd();
-
-	if (*signalfd < 0)
-		goto signal_fd_error;
-
-	return 1;
-
-signal_fd_error:
-	close(*listen_bin_sock);
-bin_sock_error:
-	close(*listen_txt_sock);
-
-	return -1;
-}
-
-void server_run(database_t* database) {
+/*
+ * Ejecucion del servidor
+ *
+ * Recibe dos sockets para escuchar modo binario o texto
+ * 
+ * Crea el socket para recibir señales, mete todos en la lista de
+ * epoll y luego inicializa los threads para empezar a recibir
+ * eventos.
+ * 
+ * En cada paso chequea si la operacion tuvo exito, y si no
+ * va hacia el final donde libera los recursos correspondientes
+ * hasta donde se llego a ejecutar
+ * 
+ * En la funcion poll_socket pasamos NULL como puntero a la 
+ * base de datos porque como no son sockets de tipo cliente
+ * no utilizan la base de datos para alocar memoria
+ */
+void server_run(database_t* database, int listen_txt_sock, int listen_bin_sock) {
 	int epfd = epoll_create(1);
 
 	if (epfd < 0)
 		return;
 
-	int listen_txt_sock;
-	int listen_bin_sock;
-	int signalfd;
+	int signalfd = require_signal_fd();
 
-	if (get_sockets(&listen_txt_sock, &listen_bin_sock, &signalfd) < 0)
-		goto socket_error;
-	
+	if (signalfd < 0)
+		goto signal_fd_error;
+
 	fdinfo_list_t* fdinfo_listen_txt = poll_socket(listen_txt_sock, epfd, Listen, Text, NULL);
 
 	if (!fdinfo_listen_txt)
@@ -238,8 +197,8 @@ fdinfo_listen_bin_error:
 	free(fdinfo_listen_txt);
 fdinfo_listen_txt_error:
 	close(signalfd);
-	close(listen_bin_sock);
-	close(listen_txt_sock);
-socket_error:
+signal_fd_error:
 	close(epfd);
+	close(listen_txt_sock);
+	close(listen_bin_sock);
 }

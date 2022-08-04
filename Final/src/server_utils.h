@@ -46,4 +46,4 @@ typedef struct thread_args {
 /*
  * Ejecucion completa del servidor
  */
-void server_run(database_t* database);
+void server_run(database_t* database, int, int);

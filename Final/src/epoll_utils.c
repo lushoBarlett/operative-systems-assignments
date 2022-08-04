@@ -1,27 +1,11 @@
 #include "epoll_utils.h"
 
-/*
- * Setea los eventos de interes para un socket.
+static void kill_client(int epfd, fdinfo_list_t* fdinfo){
+	epoll_ctl(epfd, EPOLL_CTL_DEL, fdinfo->fd, NULL);
 
- * Si es cliente, nos interesa cuando hay nuevos
- * mensajes, cuando hay desconexion y ademas
- * que cada evento lo reciba un solo thread
- * 
- * Si es una señal queremos que la reciban todos
- * los threads
- * 
- * Si es un socket de escucha queremos que
- * lo reciba un solo thread
- */
-static void poll_set_event(struct epoll_event* ev, Sock_type type) {
-	if (type == Client)
-		ev->events = EPOLLIN | EPOLLONESHOT | EPOLLHUP | EPOLLRDHUP;
+	close(fdinfo->fd);
 
-	if (type == Signal)
-		ev->events = EPOLLIN;
-
-	if (type == Listen)
-		ev->events = EPOLLIN | EPOLLONESHOT;
+	free(fdinfo);
 }
 
 static void client_state_machine_init(fdinfo_list_t* fdinfo, Cli_type cli_type, database_t* database) {
@@ -60,15 +44,70 @@ static fdinfo_list_t* fdinfo_create(int socket, Sock_type sock_type, Cli_type cl
 	return fdinfo;
 }
 
+static void fdinfo_list_remove(fdinfo_list_t* node, fdinfo_list_t** head) {
+	if (node->next)
+		node->next->prev = node->prev;
+
+	if (node->prev)
+		node->prev->next = node->next;
+	else
+		*head = node->next;
+}
+
+static void fdinfo_list_add(fdinfo_list_t* new_fdinfo, fdinfo_list_t** head) {
+	new_fdinfo->next = *head;
+	new_fdinfo->prev = NULL;
+
+	if (*head)
+		(*head)->prev = new_fdinfo;
+	
+	*head = new_fdinfo;
+}
+
+void fdinfo_list_destroy_remaining(int epfd, fdinfo_list_t** head_ptr) {
+	fdinfo_list_t* head = *head_ptr;
+	fdinfo_list_t* tmp;
+
+	while (head) {
+		tmp = head;
+		head = head->next;
+		kill_client(epfd, tmp);
+	}
+
+	free(head_ptr);
+}
+
 /*
- * Agrega un socket a la lista de seguimiento de epoll
- * 
- * Se encarga de crear un fdinfo que tendra la informacion
- * de la conexion y si todo sale correctamente lo retorna.
- * Ademas setea los eventos a seguir en dicho file descriptor
- * 
- * En caso de error retorna NULL
+ * Chequea si un evento recibido es de desconexion
  */
+static int is_hup_event(uint32_t events) {
+	return (events & EPOLLRDHUP || events &  EPOLLHUP);
+}
+
+/*
+ * Setea los eventos de interes para un socket.
+
+ * Si es cliente, nos interesa cuando hay nuevos
+ * mensajes, cuando hay desconexion y ademas
+ * que cada evento lo reciba un solo thread
+ * 
+ * Si es una señal queremos que la reciban todos
+ * los threads
+ * 
+ * Si es un socket de escucha queremos que
+ * lo reciba un solo thread
+ */
+static void poll_set_event(struct epoll_event* ev, Sock_type type) {
+	if (type == Client)
+		ev->events = EPOLLIN | EPOLLONESHOT | EPOLLHUP | EPOLLRDHUP;
+
+	if (type == Signal)
+		ev->events = EPOLLIN;
+
+	if (type == Listen)
+		ev->events = EPOLLIN | EPOLLONESHOT;
+}
+
 fdinfo_list_t* poll_socket(int socket, int epfd, Sock_type sock_type, Cli_type cli_type, database_t* database) {
 
 	struct epoll_event ev;
@@ -95,57 +134,6 @@ static int repoll_socket(fdinfo_list_t* fdinfo, int epfd, Sock_type type) {
 	poll_set_event(&event, type);
 	
 	return epoll_ctl(epfd, EPOLL_CTL_MOD, fdinfo->fd, &event);
-}
-
-static void kill_client(int epfd, fdinfo_list_t* fdinfo){
-	epoll_ctl(epfd, EPOLL_CTL_DEL, fdinfo->fd, NULL);
-
-	close(fdinfo->fd);
-
-	free(fdinfo);
-}
-
-static void fdinfo_list_remove(fdinfo_list_t* node, fdinfo_list_t** head) {
-	if (node->next)
-		node->next->prev = node->prev;
-
-	if (node->prev)
-		node->prev->next = node->next;
-	else
-		*head = node->next;
-}
-
-static void fdinfo_list_add(fdinfo_list_t* new_fdinfo, fdinfo_list_t** head) {
-	new_fdinfo->next = *head;
-	new_fdinfo->prev = NULL;
-
-	if (*head)
-		(*head)->prev = new_fdinfo;
-	
-	*head = new_fdinfo;
-}
-
-/*
- * Libera los recursos de los clientes conectados al servidor.
- * En este caso no utilizamos ninguna medida de sincronizacion
- * porque la utilizaremos cuando el servidor se este cerrando
- * y lo hara solo un thread
- */
-void fdinfo_list_destroy_remaining(int epfd, fdinfo_list_t** head_ptr) {
-	fdinfo_list_t* head = *head_ptr;
-	fdinfo_list_t* tmp;
-
-	while (head) {
-		tmp = head;
-		head = head->next;
-		kill_client(epfd, tmp);
-	}
-
-	free(head_ptr);
-}
-
-static int is_hup_event(uint32_t events) {
-	return (events & EPOLLRDHUP || events &  EPOLLHUP);
 }
 
 /*
