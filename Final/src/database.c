@@ -79,7 +79,10 @@ static void put(database_t* database, bucket_t* bucket) {
 	 * Hacemos el enqueue antes del insert,
 	 * por el caso en donde otro insert, de la misma clave,
 	 * nos quite de la tabla hash antes de que
-	 * nosotros podamos haber entrado en la LRU
+	 * nosotros podamos haber entrado en la LRU.
+	 *
+	 * Esto lo hacemos para sumar una referencia
+	 * antes de que tengan oportunidad de restar.
 	 */
 	lru_queue_lock(&database->lru_queue);
 
