@@ -44,6 +44,16 @@ typedef struct thread_args {
 } thread_args_t;
 
 /*
+ * Cambia a un usuario no root, por defecto es 1000
+ */
+int change_user();
+
+/*
+ * Crea un socket de escucha bindeado al puerto dado
+ */
+int configure_lsock(int port);
+
+/*
  * Ejecucion completa del servidor
  */
 void server_run(database_t* database, int, int);

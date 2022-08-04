@@ -1,10 +1,51 @@
 #include "server_utils.h"
 
+#define RETURN_IF_NEGATIVE(N) ({if (N < 0) return N;})
+
 /*
  * Retorna la cantidad de cores disponibles
  */
 static size_t core_count() {
 	return sysconf(_SC_NPROCESSORS_ONLN);
+}
+
+/*
+ * Utiliza setuid y setgid para cambiar id de
+ * usuario y de grupo
+ */
+int change_user() {
+    if (setgid(1000) != 0)
+        return 0;
+    
+    if (setuid(1000) != 0)
+        return 0;
+
+    return 1;
+}
+
+static int require_socket() {
+	int listen_socket = socket(AF_INET, SOCK_STREAM, 0);
+
+	RETURN_IF_NEGATIVE(listen_socket);
+
+	int yes = 1;
+
+	int sock_opt_success = setsockopt(listen_socket, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof yes);
+
+	RETURN_IF_NEGATIVE(sock_opt_success);
+
+	return listen_socket;
+}
+
+static int require_bind(int listen_socket, int port) {
+	struct sockaddr_in socket_address;
+
+	memset(&socket_address, 0, sizeof socket_address);
+	socket_address.sin_family = AF_INET;
+	socket_address.sin_port = htons(port);
+	socket_address.sin_addr.s_addr = htonl(INADDR_ANY);
+
+	return bind(listen_socket, (const struct sockaddr*)&socket_address, sizeof socket_address);
 }
 
 /*
@@ -21,6 +62,22 @@ static int require_signal_fd() {
 
 	sfd = signalfd(-1, &mask, 0);
 	return sfd;
+}
+
+int configure_lsock(int port) {
+	int listen_socket = require_socket();
+
+	RETURN_IF_NEGATIVE(listen_socket);
+	
+	int bind_success = require_bind(listen_socket, port);
+    
+	RETURN_IF_NEGATIVE(bind_success);
+	
+	int listen_success = listen(listen_socket, 10000);
+
+	RETURN_IF_NEGATIVE(listen_success);
+	
+	return listen_socket;
 }
 
 /*
@@ -199,6 +256,4 @@ fdinfo_listen_txt_error:
 	close(signalfd);
 signal_fd_error:
 	close(epfd);
-	close(listen_txt_sock);
-	close(listen_bin_sock);
 }

@@ -2,21 +2,36 @@
 #include "server_utils.h"
 
 /*
- * Recibira los sockets de escucha binarios y de texto
+ * Se ejecuta en modo root, obtiene dos sockets
+ * y luego cambia a un usuario no root para correr
+ * el servidor.
  */
-int main(int argc, char* argv[]) {
+int main() {
 	// TODO: setrlimit
-	if (argc != 3)
-		return 0;
-	
-	int listen_text_socket = strtol(argv[1], NULL, 10);
-	int listen_bin_socket = strtol(argv[2], NULL, 10);
+
+    int text_sock = configure_lsock(888);
+
+    if (text_sock < 0)
+        return 0;
+
+    int bin_sock = configure_lsock(889);
+
+    if (bin_sock < 0)
+		goto bin_sock_error;
+
+    if (!change_user())
+		goto change_user_error;
 
 	database_t database;
 
 	database_init(&database);
 
-	server_run(&database, listen_text_socket, listen_bin_socket);
+	server_run(&database, text_sock, bin_sock);
 
 	database_destroy(&database);
+
+change_user_error:
+	close(bin_sock);
+bin_sock_error:
+	close(text_sock);
 }
