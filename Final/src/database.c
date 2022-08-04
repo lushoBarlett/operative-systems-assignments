@@ -2,6 +2,10 @@
 
 #include <stdlib.h>
 
+/*
+ * Borra el bucket que está al frente de la LRU
+ * de no haber ninguno habrá segfault
+ */
 static void free_one_bucket(database_t* database) {
 	lru_queue_lock(&database->lru_queue);
 
@@ -79,7 +83,10 @@ static void put(database_t* database, bucket_t* bucket) {
 	 * Hacemos el enqueue antes del insert,
 	 * por el caso en donde otro insert, de la misma clave,
 	 * nos quite de la tabla hash antes de que
-	 * nosotros podamos haber entrado en la LRU
+	 * nosotros podamos haber entrado en la LRU.
+	 *
+	 * Esto lo hacemos para sumar una referencia
+	 * antes de que tengan oportunidad de restar.
 	 */
 	lru_queue_lock(&database->lru_queue);
 
@@ -202,7 +209,7 @@ int database_delete(database_t* database, blob_t key) {
 }
 
 record_t database_stats(database_t* database) {
-	return report(&database->record);
+	return report(&database->record, counter_get(&database->size));
 }
 
 void* database_memsafe_malloc(database_t* database, size_t bytes) {

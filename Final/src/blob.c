@@ -1,5 +1,5 @@
 #include "blob.h"
-#include <ctype.h>
+
 #include <stdlib.h>
 #include <string.h>
 
@@ -7,13 +7,6 @@
 
 blob_t blob_empty() {
 	return (blob_t){ NULL, 0 };
-}
-
-blob_t blob_create(void* memory, size_t bytes) {
-	blob_t blob;
-	blob.memory = memory;
-	blob.bytes = bytes;
-	return blob;
 }
 
 int blob_equals(blob_t a, blob_t b) {
