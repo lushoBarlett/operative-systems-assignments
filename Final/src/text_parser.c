@@ -241,21 +241,21 @@ static int parse_line(text_state_machine_t* state_machine) {
 		break;
 
 	case Get:
-		if (!(key = parse_word_and_space(&input)))
+		if (!(key = parse_word_and_end(&input)))
 			return 0;
 		
 		get(state_machine->database, key, state_machine->file_descriptor);
 		break;
 
 	case Del:
-		if (!(key = parse_word_and_space(&input)))
+		if (!(key = parse_word_and_end(&input)))
 			return 0;
 
 		del(state_machine->database, key, state_machine->file_descriptor);
 		break;
 
 	case Take:
-		if (!(key = parse_word_and_space(&input)))
+		if (!(key = parse_word_and_end(&input)))
 			return 0;
 
 		take(state_machine->database, key, state_machine->file_descriptor);
