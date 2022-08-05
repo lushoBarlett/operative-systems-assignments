@@ -320,8 +320,7 @@ static int parse_line(text_state_machine_t* state_machine) {
  * no leídos al principio
  */
 static void remove_line(text_state_machine_t* state_machine, size_t line_length) {
-	if (state_machine->read_characters > line_length)
-		memmove(state_machine->buffer, state_machine->buffer + line_length, state_machine->read_characters - line_length);
+	memmove(state_machine->buffer, state_machine->buffer + line_length, state_machine->read_characters - line_length + 1);
 
 	state_machine->read_characters -= line_length;
 }
@@ -372,7 +371,7 @@ reading:
 }
 
 static int buffer_is_full(text_state_machine_t* state_machine) {
-	return state_machine->read_characters == MAX_BUFFER_SIZE;
+	return state_machine->read_characters == MAX_BUFFER_SIZE - 1;
 }
 
 /*
