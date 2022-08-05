@@ -11,11 +11,26 @@
 #include "database.h"
 #include "blob.h"
 
-static void reply_with_string(char* string, int length, int file_descriptor) {
-	write(file_descriptor, string, length);
+int custom_write(int file_descriptor, char* buf, size_t count) {
+	int written_count;
+
+writing:
+	written_count = write(file_descriptor, buf, count);
+
+	if (written_count < 0 && (errno == EINTR))
+		goto writing;
+	
+	if (written_count < 0)
+		return 0;
+
+	return 1;
 }
 
-static void reply_with_blob(blob_t blob, int file_descriptor) {
+static int reply_with_string(char* string, int length, int file_descriptor) {
+	return custom_write(file_descriptor, string, length);
+}
+
+static int reply_with_blob(blob_t blob, int file_descriptor) {
 	char response[2048] = "OK ";
 
 	size_t limit = blob.bytes <= 2044 ? blob.bytes : 2044;
@@ -29,7 +44,7 @@ static void reply_with_blob(blob_t blob, int file_descriptor) {
 
 	response[i++] = '\n';
 
-	write(file_descriptor, response, i);
+	return custom_write(file_descriptor, response, i);
 }
 
 static int record_to_string(record_t record, char* buffer, int max_length) {
@@ -44,24 +59,36 @@ static int record_to_string(record_t record, char* buffer, int max_length) {
 	);
 }
 
-static void reply_with_record(record_t record, int file_descriptor) {
+static int reply_with_record(record_t record, int file_descriptor) {
 	char response[256];
 
 	int written_count = record_to_string(record, response, 256);
 
-	write(file_descriptor, response, written_count);
+	return custom_write(file_descriptor, response, written_count);
 }
 
-static void put(database_t* database, const char* key, const char* value, int file_descriptor) {
+static int put(database_t* database, const char* key, const char* value, int file_descriptor) {
 	size_t key_size = strlen(key);
 	size_t value_size = strlen(value);
 
-	// TODO: handle NULL
+	/*
+	 * Se crea una copia de los datos para guardarlos en la base de datos.
+	 * Si no hay espacio matamos el cliente.
+	 */
 	char* key_copy = database_memsafe_malloc(database, sizeof(char) * (key_size + 1));
+
+	if (!key_copy)
+		return 0;
+
 	strcpy(key_copy, key);
 
-	// TODO: handle NULL
 	char* value_copy = database_memsafe_malloc(database, sizeof(char) * (value_size + 1));
+
+	if (!value_copy) {
+		free(key_copy);
+		return 0;
+	}
+
 	strcpy(value_copy, value);
 
 	blob_t key_blob = {
@@ -74,17 +101,22 @@ static void put(database_t* database, const char* key, const char* value, int fi
 		.bytes = value_size
 	};
 
-	// TODO: handle NULL
 	bucket_t* bucket = database_memsafe_malloc(database, sizeof(bucket_t));
+
+	if (!bucket) {
+		free(key_copy);
+		free(value_copy);
+		return 0;
+	}
 
 	bucket_init(bucket, key_blob, value_blob);
 
 	database_put(database, bucket);
 
-	reply_with_string("OK\n", 3, file_descriptor);
+	return reply_with_string("OK\n", 3, file_descriptor);
 }
 
-static void get(database_t* database, char* key, int file_descriptor) {
+static int get(database_t* database, char* key, int file_descriptor) {
 	blob_t key_blob = {
 		.memory = key,
 		.bytes = strlen(key)
@@ -93,15 +125,17 @@ static void get(database_t* database, char* key, int file_descriptor) {
 	bucket_t* bucket = database_get(database, key_blob);
 
 	if (bucket) {
-		reply_with_blob(bucket->value, file_descriptor);
+		int reply_success = reply_with_blob(bucket->value, file_descriptor);
 
 		bucket_dereference(bucket);
+
+		return reply_success;
 	} else {
-		reply_with_string("ENOTFOUND\n", 10, file_descriptor);
+		return reply_with_string("ENOTFOUND\n", 10, file_descriptor);
 	}
 }
 
-static void take(database_t* database, char* key, int file_descriptor) {
+static int take(database_t* database, char* key, int file_descriptor) {
 	blob_t key_blob = {
 		.memory = key,
 		.bytes = strlen(key)
@@ -110,30 +144,32 @@ static void take(database_t* database, char* key, int file_descriptor) {
 	bucket_t* bucket = database_take(database, key_blob);
 
 	if (bucket) {
-		reply_with_blob(bucket->value, file_descriptor);
+		int reply_success = reply_with_blob(bucket->value, file_descriptor);
 
 		bucket_dereference(bucket);
+
+		return reply_success;
 	} else {
-		reply_with_string("ENOTFOUND\n", 10, file_descriptor);
+		return reply_with_string("ENOTFOUND\n", 10, file_descriptor);
 	}
 }
 
-static void del(database_t* database, char* key, int file_descriptor) {
+static int del(database_t* database, char* key, int file_descriptor) {
 	blob_t key_blob = {
 		.memory = key,
 		.bytes = strlen(key)
 	};
 	
 	if (database_delete(database, key_blob))
-		reply_with_string("OK\n", 3, file_descriptor);
+		return reply_with_string("OK\n", 3, file_descriptor);
 	else
-		reply_with_string("ENOTFOUND\n", 10, file_descriptor);
+		return reply_with_string("ENOTFOUND\n", 10, file_descriptor);
 }
 
-static void stats(database_t* database, int file_descriptor) {
+static int stats(database_t* database, int file_descriptor) {
 	record_t record = database_stats(database);
 
-	reply_with_record(record, file_descriptor);
+	return reply_with_record(record, file_descriptor);
 }
 
 /*
@@ -239,32 +275,37 @@ static int parse_line(text_state_machine_t* state_machine) {
 		if (!(value = parse_word_and_end(&input)))
 			return 0;
 
-		put(state_machine->database, key, value, state_machine->file_descriptor);
+		if (!put(state_machine->database, key, value, state_machine->file_descriptor))
+			return -1;
 		break;
 
 	case Get:
 		if (!(key = parse_word_and_end(&input)))
 			return 0;
 		
-		get(state_machine->database, key, state_machine->file_descriptor);
+		if (!get(state_machine->database, key, state_machine->file_descriptor))
+			return -1;
 		break;
 
 	case Del:
 		if (!(key = parse_word_and_end(&input)))
 			return 0;
 
-		del(state_machine->database, key, state_machine->file_descriptor);
+		if (!del(state_machine->database, key, state_machine->file_descriptor))
+			return -1;
 		break;
 
 	case Take:
 		if (!(key = parse_word_and_end(&input)))
 			return 0;
 
-		take(state_machine->database, key, state_machine->file_descriptor);
+		if (!take(state_machine->database, key, state_machine->file_descriptor))
+			return -1;
 		break;
 
 	case Stats:
-		stats(state_machine->database, state_machine->file_descriptor);
+		if (!stats(state_machine->database, state_machine->file_descriptor))
+			return -1;
 		break;
 
 	default:
@@ -383,7 +424,16 @@ int text_state_machine_advance(text_state_machine_t* state_machine) {
 		 * las que queden.
 		 */
 		while ((line_length = line_end(state_machine))) {
-			if (!parse_line(state_machine))
+			int parse_line_result = parse_line(state_machine);
+			
+			/*
+			 * Si ocurrió un error irrecuperable al responder al cliente
+			 * retornamos 0, lo que matará la conexión.
+			 */
+			if (parse_line_result == -1)
+				return 0;
+
+			if (parse_line_result == 0)
 				reply_with_string("EINVAL\n", 7, state_machine->file_descriptor);
 
 			remove_line(state_machine, line_length);

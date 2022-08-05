@@ -29,6 +29,21 @@ typedef enum {
 		return __succ_or_ret_expression_result; \
 }
 
+static int custom_write(int file_descriptor, const void* buf, size_t count) {
+	int written_count;
+
+writing:
+	written_count = write(file_descriptor, buf, count);
+
+	if (written_count < 0 && (errno == EINTR))
+		goto writing;
+	
+	if (written_count < 0)
+		return 0;
+
+	return 1;
+}
+
 static int record_to_string(record_t record, char* dest, int max_length) {
 	return snprintf(
 		dest, max_length,
@@ -41,22 +56,24 @@ static int record_to_string(record_t record, char* dest, int max_length) {
 	);
 }
 
-static void reply_with_code(Code code, int file_descriptor) {
-	write(file_descriptor, &code, 1);
+static int reply_with_code(Code code, int file_descriptor) {
+	return custom_write(file_descriptor, &code, 1);
 }
 
-static void reply_with_blob(blob_t blob, int file_descriptor) {
+static int reply_with_blob(blob_t blob, int file_descriptor) {
 	char response[5] = {Ok};
 
 	uint32_t network_order_blob_bytes = htonl(blob.bytes);
 
 	memcpy(response + 1, &network_order_blob_bytes, 4);
 
-	write(file_descriptor, response, 5);
-	write(file_descriptor, blob.memory, blob.bytes);
+	if (!custom_write(file_descriptor, response, 5))
+		return 0;
+
+	return (custom_write(file_descriptor, blob.memory, blob.bytes));
 }
 
-static void reply_with_record(record_t record, int file_descriptor) {
+static int reply_with_record(record_t record, int file_descriptor) {
 	/*
 	 * Cada campo del record tiene como máximo 20 caracteres, y son 6
 	 * por lo cual necesitamos al menos 120 caracteres, sumando los del mismo
@@ -71,10 +88,10 @@ static void reply_with_record(record_t record, int file_descriptor) {
 
 	memcpy(response + 1, &network_order_record_length, 4);
 
-	write(file_descriptor, response, record_length + 5);
+	return custom_write(file_descriptor, response, record_length + 5);
 }
 
-static void put(bin_state_machine_t* state_machine) {
+static int put(bin_state_machine_t* state_machine) {
 	blob_t key_blob = {
 		.memory = state_machine->key,
 		.bytes = state_machine->key_length
@@ -85,17 +102,19 @@ static void put(bin_state_machine_t* state_machine) {
 		.bytes = state_machine->value_length
 	};
 
-	// TODO: handle NULL
 	bucket_t* bucket = database_memsafe_malloc(state_machine->database, sizeof(bucket_t));
+
+	if (!bucket)
+		return 0;
 
 	bucket_init(bucket, key_blob, value_blob);
 
 	database_put(state_machine->database, bucket);
 
-	reply_with_code(Ok, state_machine->file_descriptor);
+	return reply_with_code(Ok, state_machine->file_descriptor);
 }
 
-static void get(bin_state_machine_t* state_machine) {
+static int get(bin_state_machine_t* state_machine) {
 	blob_t key_blob = {
 		.memory = state_machine->key,
 		.bytes = state_machine->key_length,
@@ -104,15 +123,17 @@ static void get(bin_state_machine_t* state_machine) {
 	bucket_t* bucket = database_get(state_machine->database, key_blob);
 
 	if (bucket) {
-		reply_with_blob(bucket->value, state_machine->file_descriptor);
+		int reply_success = reply_with_blob(bucket->value, state_machine->file_descriptor);
 
 		bucket_dereference(bucket);
+
+		return reply_success;
 	} else {
-		reply_with_code(Enotfound, state_machine->file_descriptor);
+		return reply_with_code(Enotfound, state_machine->file_descriptor);
 	}
 }
 
-static void take(bin_state_machine_t* state_machine) {
+static int take(bin_state_machine_t* state_machine) {
 	blob_t key_blob = {
 		.memory = state_machine->key,
 		.bytes = state_machine->key_length
@@ -121,30 +142,32 @@ static void take(bin_state_machine_t* state_machine) {
 	bucket_t* bucket = database_take(state_machine->database, key_blob);
 
 	if (bucket) {
-		reply_with_blob(bucket->value, state_machine->file_descriptor);
+		int reply_success = reply_with_blob(bucket->value, state_machine->file_descriptor);
 
 		bucket_dereference(bucket);
+
+		return reply_success;
 	} else {
-		reply_with_code(Enotfound, state_machine->file_descriptor);
+		return reply_with_code(Enotfound, state_machine->file_descriptor);
 	}
 }
 
-static void del(bin_state_machine_t* state_machine) {
+static int del(bin_state_machine_t* state_machine) {
 	blob_t key_blob = {
 		.memory = state_machine->key,
 		.bytes = state_machine->key_length
 	};
 	
 	if (database_delete(state_machine->database, key_blob))
-		reply_with_code(Ok, state_machine->file_descriptor);
+		return reply_with_code(Ok, state_machine->file_descriptor);
 	else
-		reply_with_code(Enotfound, state_machine->file_descriptor);
+		return reply_with_code(Enotfound, state_machine->file_descriptor);
 }
 
-static void stats(bin_state_machine_t* state_machine) {
+static int stats(bin_state_machine_t* state_machine) {
 	record_t record = database_stats(state_machine->database);
 
-	reply_with_record(record, state_machine->file_descriptor);
+	return reply_with_record(record, state_machine->file_descriptor);
 }
 
 /*
@@ -214,8 +237,10 @@ static Result parse_key_length(bin_state_machine_t* state_machine) {
 
 		state_machine->key_length = ntohl(state_machine->key_length);
 
-		// TODO: handle NULL
 		state_machine->key = database_memsafe_malloc(state_machine->database, state_machine->key_length);
+
+		if (!state_machine->key)
+			return Error;
 		
 		state_machine->state = ReadingKey;
 	}
@@ -256,8 +281,10 @@ static Result parse_value_length(bin_state_machine_t* state_machine) {
 
 		state_machine->value_length = ntohl(state_machine->value_length);
 
-		// TODO: handle NULL
 		state_machine->value = database_memsafe_malloc(state_machine->database, state_machine->value_length);
+
+		if (!state_machine->value)
+			return Error;
 		
 		state_machine->state = ReadingValue;
 	}
@@ -339,33 +366,38 @@ static Result dispatch_action(bin_state_machine_t* state_machine) {
 		FINISH_OR_RETURN(parse_key(state_machine));
 		FINISH_OR_RETURN(parse_value_length(state_machine));
 		FINISH_OR_RETURN(parse_value(state_machine));
-		put(state_machine);
+		if (!put(state_machine))
+			return Error;
 		bin_state_machine_reset(state_machine);
 		break;
 
 	case Get:
 		FINISH_OR_RETURN(parse_key_length(state_machine));
 		FINISH_OR_RETURN(parse_key(state_machine));
-		get(state_machine);
+		if (!get(state_machine))
+			return Error;
 		bin_state_machine_rollback(state_machine);
 		break;
 
 	case Del:
 		FINISH_OR_RETURN(parse_key_length(state_machine));
 		FINISH_OR_RETURN(parse_key(state_machine));
-		del(state_machine);
+		if (!del(state_machine))
+			return Error;
 		bin_state_machine_rollback(state_machine);
 		break;
 
 	case Take:
 		FINISH_OR_RETURN(parse_key_length(state_machine));
 		FINISH_OR_RETURN(parse_key(state_machine));
-		take(state_machine);
+		if (!take(state_machine))
+			return Error;
 		bin_state_machine_rollback(state_machine);
 		break;
 
 	case Stats:
-		stats(state_machine);
+		if (!stats(state_machine))
+			return Error;
 		bin_state_machine_reset(state_machine);
 		break;
 
