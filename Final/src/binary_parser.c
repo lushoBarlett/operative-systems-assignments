@@ -85,6 +85,7 @@ static void put(bin_state_machine_t* state_machine) {
 		.bytes = state_machine->value_length
 	};
 
+	// TODO: handle NULL
 	bucket_t* bucket = database_memsafe_malloc(state_machine->database, sizeof(bucket_t));
 
 	bucket_init(bucket, key_blob, value_blob);
@@ -213,6 +214,7 @@ static Result parse_key_length(bin_state_machine_t* state_machine) {
 
 		state_machine->key_length = ntohl(state_machine->key_length);
 
+		// TODO: handle NULL
 		state_machine->key = database_memsafe_malloc(state_machine->database, state_machine->key_length);
 		
 		state_machine->state = ReadingKey;
@@ -254,6 +256,7 @@ static Result parse_value_length(bin_state_machine_t* state_machine) {
 
 		state_machine->value_length = ntohl(state_machine->value_length);
 
+		// TODO: handle NULL
 		state_machine->value = database_memsafe_malloc(state_machine->database, state_machine->value_length);
 		
 		state_machine->state = ReadingValue;

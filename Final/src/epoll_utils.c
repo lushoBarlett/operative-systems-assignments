@@ -27,6 +27,7 @@ static fdinfo_list_t* fdinfo_create(int socket, Sock_type sock_type, Cli_type cl
 	fdinfo_list_t* fdinfo;
 
 	if (sock_type == Client)
+	 	// TODO: handle NULL
 		fdinfo = database_memsafe_malloc(database, sizeof (fdinfo_list_t));
 	else
 		fdinfo = malloc(sizeof (fdinfo_list_t));

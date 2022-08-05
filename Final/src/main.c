@@ -7,19 +7,25 @@
  * el servidor.
  */
 int main() {
-	// TODO: setrlimit
+	/*
+	 * 512 MiB
+	 */
+	size_t half_gigabyte = 1 << 29;
 
-    int text_sock = configure_lsock(888);
+	if (set_memory_limit(half_gigabyte) < 0)
+		return 0;
 
-    if (text_sock < 0)
-        return 0;
+	int text_sock = configure_lsock(888);
 
-    int bin_sock = configure_lsock(889);
+	if (text_sock < 0)
+		return 0;
 
-    if (bin_sock < 0)
+	int bin_sock = configure_lsock(889);
+
+	if (bin_sock < 0)
 		goto bin_sock_error;
 
-    if (!change_user())
+	if (!change_user())
 		goto change_user_error;
 
 	database_t database;

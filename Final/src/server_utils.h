@@ -44,6 +44,13 @@ typedef struct thread_args {
 } thread_args_t;
 
 /*
+ * Limita la memoria a la cantidad de bytes especificados,
+ * retorna 0 si lo logra y -1 si hubo un error,
+ * en cuyo caso setea errno según la documentación de setrlimit
+ */
+int set_memory_limit(size_t soft_limit);
+
+/*
  * Cambia a un usuario no root, por defecto es 1000
  */
 int change_user();

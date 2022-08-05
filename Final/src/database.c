@@ -3,17 +3,18 @@
 #include <stdlib.h>
 
 /*
- * Borra el bucket que está al frente de la LRU
- * de no haber ninguno habrá segfault
+ * Borra el bucket que está al frente de la LRU de la base de datos,
+ * de haber alguno retorna 1, sino no hace nada y retorna 0.
  */
-static void free_one_bucket(database_t* database) {
+static int free_one_bucket(database_t* database) {
 	lru_queue_lock(&database->lru_queue);
 
 	bucket_t* bucket = lru_queue_dequeue(&database->lru_queue);
 
 	lru_queue_unlock(&database->lru_queue);
 
-	// TODO: handle NULL?
+	if (!bucket)
+		return 0;
 
 	cell_t* cell = &database->cells[bucket->cell_index];
 
@@ -33,6 +34,8 @@ static void free_one_bucket(database_t* database) {
 	bucket_dereference(bucket);
 
 	counter_decrement(&database->size);
+
+	return 1;
 }
 
 static void cells_init(database_t* database) {
@@ -216,14 +219,14 @@ void* database_memsafe_malloc(database_t* database, size_t bytes) {
 	void* memory;
 
 	while ((memory = malloc(bytes)) == NULL)
-		free_one_bucket(database);
+		if (!free_one_bucket(database))
+			return NULL;
 	
 	return memory;
 }
 
 void database_destroy(database_t* database) {
-	while (database->lru_queue.front)
-		free_one_bucket(database);
+	while (free_one_bucket(database));
 
 	free(database->cells);
 }

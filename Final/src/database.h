@@ -83,7 +83,7 @@ record_t database_stats(database_t* database);
  * hasta poder reservar la memoria.
  * 
  * Si se vacía la base de datos y aún no se puede hacer el malloc,
- * habrá segmentation fault.
+ * la función retornará NULL.
  */
 void* database_memsafe_malloc(database_t* database, size_t bytes);
 

@@ -56,9 +56,11 @@ static void put(database_t* database, const char* key, const char* value, int fi
 	size_t key_size = strlen(key);
 	size_t value_size = strlen(value);
 
+	// TODO: handle NULL
 	char* key_copy = database_memsafe_malloc(database, sizeof(char) * (key_size + 1));
 	strcpy(key_copy, key);
 
+	// TODO: handle NULL
 	char* value_copy = database_memsafe_malloc(database, sizeof(char) * (value_size + 1));
 	strcpy(value_copy, value);
 
@@ -72,6 +74,7 @@ static void put(database_t* database, const char* key, const char* value, int fi
 		.bytes = value_size
 	};
 
+	// TODO: handle NULL
 	bucket_t* bucket = database_memsafe_malloc(database, sizeof(bucket_t));
 
 	bucket_init(bucket, key_blob, value_blob);

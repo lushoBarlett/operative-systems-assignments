@@ -1,5 +1,7 @@
 #include "server_utils.h"
 
+#include <sys/resource.h>
+
 #define RETURN_IF_NEGATIVE(N) ({if (N < 0) return N;})
 #define MAX_EVENTS 10
 
@@ -10,18 +12,27 @@ static size_t core_count() {
 	return sysconf(_SC_NPROCESSORS_ONLN);
 }
 
+int set_memory_limit(size_t soft_limit) {
+	struct rlimit newlimit = {
+		.rlim_cur = soft_limit,
+		.rlim_max = -1,
+	};
+
+	return setrlimit(RLIMIT_AS, &newlimit);
+}
+
 /*
  * Utiliza setuid y setgid para cambiar id de
  * usuario y de grupo
  */
 int change_user() {
-    if (setgid(1000) != 0)
-        return 0;
-    
-    if (setuid(1000) != 0)
-        return 0;
+	if (setgid(1000) != 0)
+		return 0;
 
-    return 1;
+	if (setuid(1000) != 0)
+		return 0;
+
+	return 1;
 }
 
 static int require_socket() {
