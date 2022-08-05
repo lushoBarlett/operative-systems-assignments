@@ -42,8 +42,8 @@ integerTo4Bytes(Int) ->
 readMore(Socket, Bytes, BytesToRead) ->
 	case gen_tcp:recv(Socket, BytesToRead) of
 		{ok, Packet} ->
-			<<Bytes, Packet>>;
-		true ->
+			<<Bytes/binary, Packet/binary>>;
+		_N ->
 			error
 	end.
 
@@ -55,7 +55,7 @@ getValue(Socket, Bytes, BytesToRead) ->
 	case BytesToRead of
 		0 ->
 			Bytes;
-		true ->
+		_N ->
 			readMore(Socket, Bytes, BytesToRead)
 	end.
 
