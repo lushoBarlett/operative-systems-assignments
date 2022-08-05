@@ -248,6 +248,14 @@ void server_run(database_t* database, int listen_txt_sock, int listen_bin_sock) 
 
 	if (!fdinfo_signal)
 		goto fdinfo_signal_error;
+
+	/*
+	 * Ignoramos la señal SIGPIPE que sucede cuando se intenta escribir
+	 * en un socket que fue cerrado. De todas formas si hay un error
+	 * irrecuperable un un write matamos al cliente.
+	 */
+	if (signal(SIGPIPE, SIG_IGN) == SIG_ERR)
+		goto thread_error;
 	
 	size_t thread_amount = core_count();
 	pthread_t* threads = malloc(sizeof(*threads) * thread_amount);
