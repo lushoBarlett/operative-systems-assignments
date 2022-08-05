@@ -43,8 +43,11 @@ static void cells_init(database_t* database) {
 		cell_init(&database->cells[i]);
 }
 
-void database_init(database_t* database) {
+int database_init(database_t* database) {
 	database->cells = malloc(sizeof(cell_t) * CAPACITY);
+
+	if (!database->cells)
+		return 0;
 
 	counter_init(&database->size, 0);
 
@@ -53,6 +56,8 @@ void database_init(database_t* database) {
 	lru_queue_init(&database->lru_queue);
 
 	record_init(&database->record);
+
+	return 1;
 }
 
 static size_t hash(blob_t key) {

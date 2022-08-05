@@ -35,7 +35,7 @@ typedef struct {
  * Inicializa el contador en 0, reserva memoria para la tabla hash
  * e inicializa todas sus celdas, la LRU y los contadores concurrentes.
  */
-void database_init(database_t* database);
+int database_init(database_t* database);
 
 /*
  * Inserta un par clave-valor en la base de datos,

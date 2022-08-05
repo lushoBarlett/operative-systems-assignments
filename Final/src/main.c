@@ -26,17 +26,18 @@ int main() {
 		goto bin_sock_error;
 
 	if (!change_user())
-		goto change_user_error;
+		goto close_all_socks;
 
 	database_t database;
 
-	database_init(&database);
+	if (!database_init(&database))
+		goto close_all_socks;
 
 	server_run(&database, text_sock, bin_sock);
 
 	database_destroy(&database);
 
-change_user_error:
+close_all_socks:
 	close(bin_sock);
 bin_sock_error:
 	close(text_sock);
