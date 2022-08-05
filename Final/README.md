@@ -20,6 +20,16 @@ Dentro de la carpeta `./bin` se encuentran los dos programas, para correrlos sim
 ```
 Los tests que limitan la memoria no se llevan bien con `valgrind`, así que comentarlos es imperativo para revisar que no haya _memory leaks_. Por otro lado `valgrind` no se lleva bien con el _multithreading_, porque lo serializa, y hay tests que tardan una eternidad en finalizar. Nosotros testeamos con y sin `valgrind` quitando los tests adecuados para revisar que no haya _memory leaks_, pero la forma natural de correr los tests es así nomás.
 
+En la carpeta `./src` se encuentran dos programas que implementan los bindings en erlang. Los compilamos y ejecutamos usando la máquina virtual de Erlang.
+
+```
+1> erl
+2> c(sync).
+3> c(bindings).
+4> K = bindings:start().
+5>
+```
+
 ## Trayecto del TP
 
 #### Comenzando
@@ -132,8 +142,7 @@ De ahí, cambiamos la forma de parsear texto en la que seguimos los siguientes p
 4. Se siguen parseando líneas hasta no tener más.
 5. Finalmente puede que al leer se haya llenado el `buffer` y había más para parsear, en este caso volvemos al paso 1.
 
-Para parsear una línea vamos marcando los estados en la máquina de estados y además llevamos la cantidad de caracteres leídos.
-
+Para parsear una línea vamos marcando los estados en la máquina de estados y además llevamos la cantidad de caracteres leídos. Sólo se aceptan líneas que cumplan el protocolo, en otro caso contesta `EINVAL`.
 ###### Resumiendo...
 
 Hasta acá teníamos "resuelto" el problema en diferentes capas, la del manejador de eventos (que ya no leía si no que indicaba la posibilidad de hacerlo) y la de los parsers. El manejador cada vez que recibía nuevos clientes les creaba un `fdinfo` en el cual guardábamos tipo de socket, tipo de cliente, sus máquinas de estados, etc... Ahí ibamos a encontrar un problema
